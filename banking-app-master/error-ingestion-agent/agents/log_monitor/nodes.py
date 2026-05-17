@@ -23,7 +23,12 @@ logger = logging.getLogger(__name__)
 class IncidentState(TypedDict):
     # Input
     raw_log: str
-    source: str                     # 'db_watcher' | 'datadog_webhook'
+    source: str                     # 'db_watcher' | 'datadog_webhook' | 'datadog_poll'
+
+    # Service context — overrides settings.service_name / settings.environment when set.
+    # Empty string means "use the env-var default" (preserves mode=db / mode=datadog behaviour).
+    service_name: str
+    environment: str
 
     # After parse node
     parsed: Optional[ParsedLogEntry]
@@ -38,7 +43,7 @@ class IncidentState(TypedDict):
     gemini_category: Optional[str]
 
     # After store node
-    incident_id: Optional[int]
+    incident_id: Optional[str]      # UUID string (was int in earlier version)
     stored: bool
 
     # Error tracking
@@ -91,13 +96,17 @@ def analyze_node(state: IncidentState) -> IncidentState:
     """
     logger.info("analyze_node: calling Gemini for incident analysis")
 
+    # Use state-level overrides (set by datadog_poll mode) or fall back to env-var defaults
+    svc = state.get("service_name") or settings.service_name
+    env = state.get("environment") or settings.environment
+
     prompt = f"""You are an incident analysis assistant. Given this log entry from a production service,
 provide:
 1. A one-sentence summary of what went wrong (for incident tracking)
 2. An error category (one of: code_defect, config_error, dependency_failure, resource_exhaustion, external_api, unknown)
 
-Service: {settings.service_name}
-Environment: {settings.environment}
+Service: {svc}
+Environment: {env}
 Severity: {state.get('severity', 'ERROR')}
 Error Type: {state.get('error_type') or 'Unknown'}
 Message: {state.get('message', '')}
@@ -144,14 +153,20 @@ CATEGORY: <category>"""
 
 async def store_node(state: IncidentState) -> IncidentState:
     """
-    Persist the parsed + analyzed incident to the unified error_incidents table.
+    Persist the parsed + analyzed incident to the unified error_logs table.
+
+    service_name and environment are read from state first (set by datadog_poll mode
+    from the Datadog log event), falling back to env-var settings for mode=db / mode=datadog.
     """
     logger.info("store_node: writing incident to MySQL")
 
+    svc = state.get("service_name") or settings.service_name
+    env = state.get("environment") or settings.environment
+
     try:
         incident_id = await insert_incident(
-            service_name=settings.service_name,
-            environment=settings.environment,
+            service_name=svc,
+            environment=env,
             error_type=state.get("error_type"),
             message=state.get("gemini_summary") or state.get("message", ""),
             severity=state.get("severity", "ERROR"),

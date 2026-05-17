@@ -64,6 +64,11 @@ def main():
         ("payment-service", args.org, "payment-service", "main"),
         ("order-service", args.org, "order-service", "main"),
         # notification-service intentionally excluded (sub-agent demo)
+        # banking-app: the live AWS service monitored via Datadog poll mode.
+        # Added here so the RCA agent can find its repo when an incident
+        # arrives from the ingestion agent.  The github_repo must match the
+        # repository name under GITHUB_ORG in your GitHub account.
+        ("banking-app", args.org, "banking-app", "main"),
     ]
     for svc, org, repo, branch in services:
         cur.execute(

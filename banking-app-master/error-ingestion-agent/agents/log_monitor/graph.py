@@ -27,13 +27,22 @@ def build_graph():
 incident_graph = build_graph()
 
 
-async def process_log_entry(raw_log: str, source: str = "db_watcher") -> IncidentState:
+async def process_log_entry(
+    raw_log: str,
+    source: str = "db_watcher",
+    service_name: str = "",
+    environment: str = "",
+) -> IncidentState:
     """
     Run the full incident processing pipeline for a single log entry.
 
     Args:
-        raw_log: Raw log text (single or multi-line)
-        source:  'db_watcher' | 'datadog_webhook'
+        raw_log:      Raw log text (single or multi-line).
+        source:       'db_watcher' | 'datadog_webhook' | 'datadog_poll'
+        service_name: Override the service name written to error_logs.
+                      Empty string → nodes fall back to settings.service_name.
+                      Set by datadog_poll mode from the Datadog log event's service tag.
+        environment:  Override the environment. Same fallback pattern as service_name.
 
     Returns:
         Final graph state (IncidentState) with incident_id populated on success.
@@ -41,6 +50,8 @@ async def process_log_entry(raw_log: str, source: str = "db_watcher") -> Inciden
     initial_state: IncidentState = {
         "raw_log":         raw_log,
         "source":          source,
+        "service_name":    service_name,
+        "environment":     environment,
         "parsed":          None,
         "error_type":      None,
         "message":         "",

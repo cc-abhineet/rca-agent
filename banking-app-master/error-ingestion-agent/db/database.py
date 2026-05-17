@@ -82,6 +82,62 @@ async def ensure_table() -> None:
                 logger.info("error_logs table ready")
 
 
+async def read_cursor(service_name: str) -> Optional[str]:
+    """
+    Read the stored Datadog Logs API pagination cursor for a service.
+
+    The cursor is persisted in service_context_cache so the poller can resume
+    exactly where it left off after a restart (at-least-once delivery guarantee).
+
+    Returns None when no cursor exists (first ever poll for this service).
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """SELECT content FROM service_context_cache
+                   WHERE service_name = %s
+                     AND cache_key    = 'dd_cursor'
+                     AND invalidated_at IS NULL""",
+                (service_name,),
+            )
+            row = await cur.fetchone()
+    if not row:
+        return None
+    content = row[0]
+    if isinstance(content, str):
+        content = json.loads(content)
+    return content.get("cursor")
+
+
+async def save_cursor(service_name: str, cursor: str) -> None:
+    """
+    Upsert the Datadog Logs API pagination cursor for a service.
+
+    Called AFTER successfully processing a batch of log events so that a
+    mid-batch crash re-processes at most one batch (at-least-once semantics).
+    Duplicate events that result from a retry are harmless — each gets its own
+    UUID in error_logs and generates a separate RCA report.
+    """
+    content = json.dumps({
+        "cursor":         cursor,
+        "last_polled_at": datetime.utcnow().isoformat(),
+    })
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """INSERT INTO service_context_cache
+                       (service_name, cache_key, content)
+                   VALUES (%s, 'dd_cursor', %s)
+                   ON DUPLICATE KEY UPDATE
+                       content        = VALUES(content),
+                       last_used_at   = NOW(),
+                       invalidated_at = NULL""",
+                (service_name, content),
+            )
+        await conn.commit()
+    logger.debug("Cursor saved for %s", service_name)
+
+
 async def insert_incident(
     service_name: str,
     environment: str,
