@@ -41,8 +41,8 @@ The pipeline has three layers:
 
 **What it does end-to-end:**
 1. The banking app (or any service) writes error logs to a file.
-2. The **Error Ingestion Agent** watches the file, detects ERROR/WARN lines, classifies them using Google Gemini, and stores them in a PostgreSQL table.
-3. The **RCA Agent** receives a trigger, loads the error from PostgreSQL, uses Claude in a **ReAct (Reason + Act) loop** with 10 GitHub tools to read code, inspect diffs, and query deployments — then writes a full structured RCA report back to the database and serves it as a rendered HTML page.
+2. The **Error Ingestion Agent** watches the file, detects ERROR/WARN lines, classifies them using Google Gemini, and stores them in a MySQL table.
+3. The **RCA Agent** receives a trigger, loads the error from MySQL, uses Claude in a **ReAct (Reason + Act) loop** with 10 GitHub tools to read code, inspect diffs, and query deployments — then writes a full structured RCA report back to the database and serves it as a rendered HTML page.
 
 ---
 
@@ -54,15 +54,14 @@ The pipeline has three layers:
 │                                                                     │
 │  ┌──────────────┐   logs    ┌───────────────────────────────────┐   │
 │  │  Banking App │──────────▶│       Error Ingestion Agent        │   │
-│  │  (Java :8080)│  /var/log │  LangGraph: parse→analyze→store   │   │
+│  │  (Java :8080)│  /var/log │  LangGraph: parse→analyze→store    │   │
 │  └──────────────┘           │  Gemini: classify error category   │   │
-│                             └──────────────┬──────────────────── ┘   │
-│                                            │ INSERT error_incidents   │
+│                             └──────────────┬─────────────────────┘   │
+│                                            │ INSERT error_logs       │
 │                                            ▼                         │
 │                              ┌─────────────────────┐                 │
-│                              │   PostgreSQL rca_db  │                 │
+│                              │     MySQL rca_db    │                 │
 │                              │  - error_logs        │                 │
-│                              │  - error_incidents   │                 │
 │                              │  - service_repo_map  │                 │
 │                              │  - service_context_  │                 │
 │                              │    cache             │                 │
@@ -83,10 +82,10 @@ The pipeline has three layers:
 │  │         ├─ get_commits_since   → GitHub API                   │    │
 │  │         ├─ get_recent_deployments → CICD Adapter (mock/real)  │    │
 │  │         ├─ get_service_metadata   → Obs Adapter               │    │
-│  │         ├─ read_context_cache  → PostgreSQL                   │    │
-│  │         ├─ write_context_cache → PostgreSQL                   │    │
+│  │         ├─ read_context_cache  → MySQL                   │    │
+│  │         ├─ write_context_cache → MySQL                   │    │
 │  │         └─ finish_rca          → END (writes RCAReport)       │    │
-│  │    4. Persist RCA result → PostgreSQL                         │    │
+│  │    4. Persist RCA result → MySQL                         │    │
 │  │    5. Serve HTML report at /rca/{id}/report                   │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 │                                                                      │
@@ -104,7 +103,7 @@ The pipeline has three layers:
 
 **Location:** `banking-app-master/` (root Dockerfile + `pom.xml`)
 
-The banking app is the **error source** — a standard Spring Boot service that writes structured logs to `/var/log/banking-app/app.log`. It connects to PostgreSQL via JDBC. For this demo it deliberately contains (or can produce) buggy behavior in services like `AccountService`, `PaymentService`, etc.
+The banking app is the **error source** — a standard Spring Boot service that writes structured logs to `/var/log/banking-app/app.log`. It connects to MySQL via JDBC. For this demo it deliberately contains (or can produce) buggy behavior in services like `AccountService`, `PaymentService`, etc.
 
 Key points:
 - Runs on port `8080`
@@ -146,8 +145,9 @@ raw_log (str)
     │
     ▼
 [store_node]
-    - INSERT INTO error_incidents (asyncpg)
-    - Returns incident_id
+    - INSERT INTO error_logs (aiomysql) — the same unified table the RCA
+      agent reads from
+    - Returns the new error_logs.id (UUID4 string)
 ```
 
 ### 3.3 RCA Agent
@@ -156,7 +156,7 @@ raw_log (str)
 
 **Purpose:** The main AI reasoning engine. Given an `error_log_id`, it performs a full automated Root Cause Analysis using Claude in a ReAct loop.
 
-**Stack:** FastAPI + Anthropic Python SDK + PyGithub + psycopg2 + PostgreSQL
+**Stack:** FastAPI + Anthropic Python SDK + PyGithub + PyMySQL + MySQL
 
 ---
 
@@ -190,7 +190,7 @@ Implements the three graph nodes. Each node receives the full `IncidentState` Ty
 
 - **`parse_node`**: Calls `parse_log_entry()` from `utils/log_parser.py`. Fills in `error_type`, `message`, `severity`, `stack_trace`, `timestamp`.
 - **`analyze_node`**: Creates a `ChatGoogleGenerativeAI` (Gemini 1.5 Flash) with temperature 0.1. Sends a structured prompt. Parses `SUMMARY:` and `CATEGORY:` lines from the response. Falls back gracefully if Gemini is unavailable.
-- **`store_node`**: Calls `insert_incident()` async function. Stores everything in `error_incidents` table.
+- **`store_node`**: Calls `insert_incident()` async function. Stores the record in the unified `error_logs` table (the same table the RCA agent reads from — there is no separate `error_incidents` table in this codebase).
 
 `IncidentState` TypedDict fields:
 ```
@@ -213,25 +213,34 @@ Regex patterns:
 `is_error_line(raw_log)` — quick check used by the file watcher before committing to full parse.
 
 #### `error-ingestion-agent/db/database.py`
-Async PostgreSQL layer using `asyncpg`. Manages a connection pool (`_pool` singleton, min=1, max=5).
+Async MySQL layer using `aiomysql`. Manages a connection pool (`_pool` singleton, min=1, max=5).
 
 Key functions:
-- `ensure_table()` — creates `error_incidents` table idempotently on startup
-- `insert_incident()` — inserts one incident, returns new `id` (SERIAL int)
-- `get_pool()`, `close_pool()`, `get_connection()` async context manager
+- `ensure_table()` — verifies the `error_logs` table exists (created by the
+  rca-agent's Alembic migration `001_initial.py`; the ingestion agent does
+  not own the schema).
+- `insert_incident(...)` — inserts one row into `error_logs` with a freshly
+  generated UUID4 string as `id`, `rca_status='pending'`, and the raw log
+  embedded in `metadata`. Returns the new row's UUID.
+- `get_pool()`, `close_pool()`, `get_connection()` async context manager.
 
-Table `error_incidents` schema:
-```sql
-id SERIAL, service_name, environment, error_type, message,
-severity, stack_trace, raw_log, occurred_at, source, rca_status, rca_result, created_at
-```
+The ingestion agent writes directly into the **same `error_logs` table** the
+RCA agent reads from — they share the row's lifecycle (`pending` →
+`in_progress` → `completed` / `failed`). There is no separate
+`error_incidents` table.
+
+**Datetime note:** `insert_incident()` defaults `occurred_at` to
+`datetime.utcnow()`, which returns a **naive** datetime. MySQL stores it
+verbatim; `LocalDBAdapter` promotes it to tz-aware UTC on read (see the
+"Datetime handling contract" in §4.2). New writers should ideally use
+`datetime.now(timezone.utc)` since `utcnow()` is deprecated in Python 3.12+.
 
 #### `error-ingestion-agent/config/settings.py`
 `pydantic-settings` class. Reads from `.env` or environment variables (case-insensitive).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://postgres:...` | PostgreSQL DSN |
+| `DATABASE_URL` | `mysql+pymysql://root:root@localhost:3306/rca_db` | MySQL DSN (accepts `mysql+pymysql://`, `mysql+aiomysql://`, or `mysql://`) |
 | `GEMINI_API_KEY` | `""` | Google Gemini auth |
 | `MODE` | `db` | `db` or `datadog` |
 | `LOG_FILE_PATH` | `/var/log/banking-app/app.log` | Log file to tail |
@@ -248,7 +257,7 @@ The FastAPI application entry point.
 
 On startup, creates three singletons:
 ```python
-obs_adapter = LocalDBAdapter()      # reads error_logs from PostgreSQL
+obs_adapter = LocalDBAdapter()      # reads error_logs from MySQL
 cicd_adapter = MockCICDAdapter()    # returns hardcoded deployment records
 agent = RCAAgent(obs_adapter, cicd_adapter)
 ```
@@ -282,8 +291,8 @@ The core of the system. Defines `RCAAgent` class and all Claude tool definitions
 | `get_commits_since` | List commits on a branch since a timestamp |
 | `get_recent_deployments` | Query CICD adapter for recent deploys |
 | `get_service_metadata` | Query observability adapter for service info |
-| `read_context_cache` | Read from `service_context_cache` PostgreSQL table |
-| `write_context_cache` | Write to `service_context_cache` PostgreSQL table |
+| `read_context_cache` | Read from `service_context_cache` MySQL table |
+| `write_context_cache` | Write to `service_context_cache` MySQL table |
 | `finish_rca` | Submit completed report — ENDS THE LOOP |
 
 **`RCAAgent.run()` method steps:**
@@ -315,7 +324,7 @@ The core of the system. Defines `RCAAgent` class and all Claude tool definitions
 | `ANTHROPIC_API_KEY` | required | Claude auth |
 | `GITHUB_PAT` | `""` | GitHub Personal Access Token |
 | `GITHUB_ORG` | `oscorpAI` | Default GitHub org |
-| `DATABASE_URL` | required | PostgreSQL DSN |
+| `DATABASE_URL` | required | MySQL DSN |
 | `MODEL` | `claude-sonnet-4-6` | Which Claude model to use |
 | `MAX_REACT_ITERATIONS` | `20` | Max ReAct loop iterations |
 | `OBSERVABILITY_ADAPTER` | `local` | `local` or `datadog` |
@@ -358,7 +367,7 @@ Five functions that wrap the PyGithub library. All return plain dicts. All catch
 Uses a lazy-initialized `_gh` singleton (`Github(settings.github_pat)`).
 
 #### `rca-agent/rca_agent/cache.py`
-PostgreSQL-backed key-value cache for GitHub file contents. The cache avoids redundant GitHub API calls within and across RCA sessions.
+MySQL-backed key-value cache for GitHub file contents. The cache avoids redundant GitHub API calls within and across RCA sessions.
 
 - `read_cache(service_name, cache_key)` — reads from `service_context_cache`. Returns `None` if missing or `invalidated_at IS NOT NULL`. Updates `last_used_at` on hit.
 - `write_cache(service_name, cache_key, content, commit_sha)` — UPSERT (ON CONFLICT DO UPDATE). Resets `invalidated_at = NULL`.
@@ -371,20 +380,30 @@ PostgreSQL-backed key-value cache for GitHub file contents. The cache avoids red
 - `rca_history` — for the rolling RCA history list
 
 #### `rca-agent/rca_agent/db.py`
-Synchronous PostgreSQL layer using `psycopg2`. Thin wrapper with a context manager:
+Synchronous MySQL layer using `PyMySQL`. Thin wrapper with a context manager:
 
 ```python
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(settings.database_url)
-    yield conn  # auto-commit or rollback
+    conn = pymysql.connect(**_conn_kwargs())   # DictCursor + utf8mb4
+    yield conn                                  # commit or rollback on exit
     conn.close()
 
-execute(sql, params) → list[dict]     # uses RealDictCursor
+execute(sql, params) → list[dict]     # uses PyMySQL DictCursor
 execute_one(sql, params) → dict|None  # returns first row or None
+json_loads(v)                          # safely parse a JSON column value
 ```
 
-Every query opens a new connection (no pool). This is fine for low-frequency RCA workloads.
+`_conn_kwargs()` parses any `mysql+pymysql://`, `mysql+mysqldb://`, or
+`mysql://` DSN into PyMySQL connect kwargs (host/port/user/password/database
++ `charset="utf8mb4"`, `DictCursor`, `autocommit=False`).
+
+Every query opens a new connection (no pool). This is fine for low-frequency
+RCA workloads.
+
+**JSON quirk:** PyMySQL returns `JSON` columns as **strings**, not dicts/lists.
+All read sites in this codebase wrap results with `json_loads()` from
+`rca_agent.db`. If you add a new query that reads a JSON column, do the same.
 
 #### `rca-agent/rca_agent/repo_resolver.py`
 Determines which GitHub repo corresponds to a given service name. This is crucial because the error log only knows the service name, not the repo URL.
@@ -393,7 +412,7 @@ Determines which GitHub repo corresponds to a given service name. This is crucia
 
 ```
 1. Query CICD adapter for recent deployments → extracts github_repo
-2. Query service_repo_map table in PostgreSQL
+2. Query service_repo_map table in MySQL
 
    ┌─ Both found → "cicd+mapping" (uses CI/CD commit SHA, mapping org)
    ├─ CI/CD only → "cicd" (auto-writes new mapping entry)
@@ -447,9 +466,29 @@ class CICDAdapterProtocol(Protocol):
 Any class implementing these methods works — no inheritance needed.
 
 #### `rca-agent/rca_agent/adapters/observability/local_db.py`
-`LocalDBAdapter` — reads from the `error_logs` PostgreSQL table. This is the production adapter for non-Datadog deployments.
+`LocalDBAdapter` — reads from the `error_logs` MySQL table. This is the production adapter for non-Datadog deployments.
 
 `get_error_log(error_id)` — `SELECT * FROM error_logs WHERE id = %s`, maps row to `ErrorLogEntry`.
+
+##### Datetime handling contract
+
+MySQL `DATETIME` columns come back from PyMySQL as **naive** Python datetimes
+(no `tzinfo`), but the rest of the codebase — mock CI/CD fixtures, JSON
+serialization, ISO 8601 timestamps in the Claude prompt — operates on
+**tz-aware UTC** datetimes. To prevent `TypeError: can't compare offset-naive
+and offset-aware datetimes` deep in `RepoResolver.resolve()` /
+`MockCICDAdapter.get_recent_deployments()`, `LocalDBAdapter.get_error_log()`
+**normalizes `occurred_at` to tz-aware UTC at the adapter boundary**:
+
+```python
+occurred_at = row["occurred_at"]
+if occurred_at is not None and occurred_at.tzinfo is None:
+    occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+```
+
+Every downstream consumer can assume `ErrorLogEntry.occurred_at` is tz-aware
+UTC. **Any new observability adapter (Datadog, OpenSearch, etc.) must do the
+same promotion before returning the `ErrorLogEntry`.**
 
 #### `rca-agent/rca_agent/adapters/observability/datadog.py`
 `DatadogAdapter` — stub. Both methods raise `NotImplementedError`. Intended to be filled with Datadog API calls:
@@ -483,42 +522,51 @@ Called only when both CI/CD deployment data and `service_repo_map` lookup fail.
 
 ## 5. Database Schema
 
-All tables live in PostgreSQL database `rca_db`. Created by Alembic migration `001_initial.py`.
+All tables live in MySQL database `rca_db` (engine=InnoDB, charset=utf8mb4).
+Created by Alembic migration `001_initial.py`. MySQL `DATETIME` is timezone-
+*naive* on the wire — see the "Datetime handling contract" in §4.2 for how
+the read path normalizes to UTC.
 
 ### `error_logs`
-Stores one row per error event that needs RCA.
+Stores one row per error event that needs RCA. Written by both the Error
+Ingestion Agent (on new log lines) and the RCA Agent (state updates during
+analysis). This is the unified table — there is no separate `error_incidents`
+table.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | UUID (PK) | `gen_random_uuid()` |
-| `service_name` | TEXT | e.g. `payment-service` |
-| `environment` | TEXT | e.g. `production` |
-| `error_type` | TEXT | e.g. `AttributeError` |
+| `id` | CHAR(36) (PK) | UUID4 string, generated by the writer |
+| `service_name` | VARCHAR(255) | e.g. `payment-service` |
+| `environment` | VARCHAR(100) | e.g. `production` |
+| `error_type` | VARCHAR(500) | e.g. `AttributeError` |
 | `error_message` | TEXT | Human-readable message |
-| `stack_trace` | JSONB | Array of frame objects |
-| `severity` | TEXT | `critical/high/medium/low` |
-| `occurred_at` | TIMESTAMPTZ | When the error happened |
-| `request_id` | TEXT | Optional |
-| `user_id` | TEXT | Optional |
-| `metadata` | JSONB | Extra context |
-| `rca_status` | TEXT | `pending/in_progress/completed/failed` |
-| `rca_started_at` | TIMESTAMPTZ | |
-| `rca_completed_at` | TIMESTAMPTZ | |
-| `rca_result` | JSONB | Full RCA report |
+| `stack_trace` | JSON | Array of frame objects |
+| `severity` | VARCHAR(50) | `critical/high/medium/low` |
+| `occurred_at` | DATETIME | When the error happened (UTC, naive) |
+| `request_id` | VARCHAR(255) | Optional |
+| `user_id` | VARCHAR(255) | Optional |
+| `metadata` | JSON | Extra context (ingestion agent stashes `raw_log` here) |
+| `rca_status` | VARCHAR(50) | `pending/in_progress/completed/failed`, default `pending` |
+| `rca_started_at` | DATETIME | |
+| `rca_completed_at` | DATETIME | |
+| `rca_result` | JSON | Full RCA report |
 | `rca_error` | TEXT | Error message if failed |
 
+Indexes: `service_name`, `occurred_at DESC`, `rca_status`.
+
 ### `service_repo_map`
-Maps service names to GitHub repos. Written by `RepoResolver._write_mapping()`.
+Maps service names to GitHub repos. Written by `RepoResolver._write_mapping()`
+via `INSERT ... ON DUPLICATE KEY UPDATE`.
 
 | Column | Type | Notes |
 |---|---|---|
-| `service_name` | TEXT (PK) | |
-| `github_org` | TEXT | |
-| `github_repo` | TEXT | |
-| `default_branch` | TEXT | `main` |
-| `language` | TEXT | Optional |
-| `onboarded_at` | TIMESTAMPTZ | |
-| `onboarded_by` | TEXT | Optional |
+| `service_name` | VARCHAR(255) (PK) | |
+| `github_org` | VARCHAR(255) | |
+| `github_repo` | VARCHAR(255) | |
+| `default_branch` | VARCHAR(100) | Default `main` |
+| `language` | VARCHAR(100) | Optional |
+| `onboarded_at` | DATETIME | Default `NOW()` |
+| `onboarded_by` | VARCHAR(255) | Optional |
 | `notes` | TEXT | Optional |
 
 ### `service_context_cache`
@@ -526,47 +574,28 @@ Caches GitHub file content to avoid redundant API calls.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | UUID (PK) | |
-| `service_name` | TEXT | |
-| `cache_key` | TEXT | `file:<path>` or `repo_tree` or `rca_history` |
-| `content` | JSONB | Arbitrary content object |
-| `commit_sha` | TEXT | Optional SHA to track cache validity |
-| `created_at` | TIMESTAMPTZ | |
-| `last_used_at` | TIMESTAMPTZ | Updated on every read |
-| `invalidated_at` | TIMESTAMPTZ | Non-null means cache miss |
+| `id` | INT AUTO_INCREMENT (PK) | |
+| `service_name` | VARCHAR(255) | |
+| `cache_key` | VARCHAR(500) | `file:<path>` or `repo_tree` or `rca_history` |
+| `content` | JSON | Arbitrary content object |
+| `commit_sha` | VARCHAR(40) | Optional SHA to track cache validity |
+| `created_at` | DATETIME | Default `NOW()` |
+| `last_used_at` | DATETIME | Updated on every read |
+| `invalidated_at` | DATETIME | Non-null means cache miss |
 
 Unique constraint: `(service_name, cache_key)`.
 
 ### `rca_reports`
-Stores finalized RCA reports (separate from `error_logs.rca_result` JSONB).
+Stores finalized RCA reports (separate from `error_logs.rca_result` JSON).
 
 | Column | Type | Notes |
 |---|---|---|
-| `rca_id` | TEXT (PK) | UUID string |
-| `error_log_id` | UUID | FK → `error_logs.id` |
-| `service_name` | TEXT | |
-| `generated_at` | TEXT | ISO 8601 string |
-| `report` | JSONB | Full report JSON |
-| `created_at` | TIMESTAMPTZ | |
-
-### `error_incidents`
-Written by the **Error Ingestion Agent** (not the RCA Agent). Simpler schema.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | SERIAL (PK) | Integer |
+| `rca_id` | VARCHAR(36) (PK) | UUID string (matches `RCAReport.rca_id`) |
+| `error_log_id` | CHAR(36) | FK → `error_logs.id` (ON DELETE SET NULL) |
 | `service_name` | VARCHAR(255) | |
-| `environment` | VARCHAR(100) | |
-| `error_type` | VARCHAR(500) | |
-| `message` | TEXT | Gemini summary or raw message |
-| `severity` | VARCHAR(50) | |
-| `stack_trace` | TEXT | Full stack trace text |
-| `raw_log` | TEXT | Original log line(s) |
-| `occurred_at` | TIMESTAMPTZ | |
-| `source` | VARCHAR(50) | `db_watcher` or `datadog_webhook` |
-| `rca_status` | VARCHAR(50) | `pending/in_progress/completed/failed` |
-| `rca_result` | TEXT | |
-| `created_at` | TIMESTAMPTZ | |
+| `generated_at` | VARCHAR(50) | ISO 8601 string |
+| `report` | JSON | Full report JSON |
+| `created_at` | DATETIME | Default `NOW()` |
 
 ---
 
@@ -581,8 +610,8 @@ Written by the **Error Ingestion Agent** (not the RCA Agent). Simpler schema.
 4. Lines are buffered to reconstruct multi-line stack traces
 5. is_error_line() checks for ERROR/WARN/EXCEPTION keywords
 6. _flush_buffer() calls process_log_entry(raw_log)
-7. LangGraph: parse_node → analyze_node (Gemini) → store_node (asyncpg INSERT)
-8. error_incidents row created with rca_status='pending'
+7. LangGraph: parse_node → analyze_node (Gemini) → store_node (aiomysql INSERT)
+8. error_logs row created with rca_status='pending'
 ```
 
 ### Flow 2: RCA Agent Trigger
@@ -799,6 +828,21 @@ RCA starts
 
 ## 12. API Endpoints
 
+### ID conventions
+
+Two UUIDs appear in the API and they are **not interchangeable**:
+
+| ID | Where it comes from | Where it's used |
+|---|---|---|
+| `error_log_id` | `error_logs.id` (DB primary key, written by ingestion or seed) | Request bodies to `/rca/run` and `/rca/run/stream`; path parameter in `GET /rca/{error_log_id}/report` |
+| `rca_id` | Generated by Claude inside `finish_rca` (UUID4) | A field inside the `RCAReport` JSON; also stored on `rca_reports.rca_id` |
+
+The report-rendering endpoint is keyed on `error_log_id`. If you build a URL
+or DB lookup using `rca_id` where `error_log_id` is expected, the
+`SELECT … FROM error_logs WHERE id = …` returns nothing and the route 404s
+with `{"detail": "Error log not found"}`. The demo UI's `showReport()` uses
+`reportDict.error_log_id` for exactly this reason.
+
 ### RCA Agent (`http://localhost:8000`)
 
 ```
@@ -893,10 +937,10 @@ GET  /health
 ```
 Service           Port   Depends On    Key Volume
 ─────────────────────────────────────────────────────────
-postgres          5432   —             postgres_data (persistent)
-banking-app       8080   postgres      banking_logs (writes)
-error-ingestion   8001   postgres      banking_logs (read-only)
-rca-agent         8000   postgres      —
+mysql             3306   —             mysql_data (persistent)
+banking-app       8080   mysql         banking_logs (writes)
+error-ingestion   8001   mysql         banking_logs (read-only)
+rca-agent         8000   mysql         —
 demo-ui           3000   banking-app,  ./demo-ui (nginx static)
                          rca-agent
 ```
@@ -904,7 +948,7 @@ demo-ui           3000   banking-app,  ./demo-ui (nginx static)
 **Shared volume `banking_logs`:** Both `banking-app` (writes) and `error-ingestion-agent` (reads with `:ro`) mount `/var/log/banking-app`. This is how log file tailing works across containers.
 
 **Health checks:**
-- `postgres`: `pg_isready` every 5s, 10 retries
+- `mysql`: `mysqladmin ping` every 5s, 10 retries
 - `banking-app`: `curl /actuator/health` every 10s, 30s start period
 - `rca-agent`: `curl /health` every 10s
 
@@ -916,8 +960,8 @@ demo-ui           3000   banking-app,  ./demo-ui (nginx static)
 
 | Variable | Purpose |
 |---|---|
-| `POSTGRES_USER` | PostgreSQL superuser |
-| `POSTGRES_PASSWORD` | PostgreSQL password |
+| `MYSQL_ROOT_PASSWORD` | MySQL root password |
+| `MYSQL_DATABASE` | MySQL database name (defaults to `rca_db`) |
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `GITHUB_TOKEN` | GitHub PAT (read-only access) |
 | `GITHUB_ORG` | GitHub org to search in |
@@ -933,7 +977,7 @@ demo-ui           3000   banking-app,  ./demo-ui (nginx static)
 | `ANTHROPIC_API_KEY` | required | |
 | `GITHUB_PAT` | required | |
 | `GITHUB_ORG` | `oscorpAI` | |
-| `DATABASE_URL` | `postgresql://...` | psycopg2 format |
+| `DATABASE_URL` | `mysql+pymysql://root:root@localhost:3306/rca_db` | PyMySQL DSN |
 | `MODEL` | `claude-sonnet-4-6` | |
 | `MAX_REACT_ITERATIONS` | `20` | |
 | `OBSERVABILITY_ADAPTER` | `local` | |
@@ -1000,7 +1044,7 @@ Full nested Pydantic model. Key fields:
 | Uvicorn | ≥ 0.29 | ASGI server |
 | Anthropic SDK | ≥ 0.25 | Claude API client (ReAct loop) |
 | PyGithub | ≥ 2.3 | GitHub REST API wrapper |
-| psycopg2-binary | ≥ 2.9 | PostgreSQL driver (sync) |
+| PyMySQL | ≥ 1.1 | MySQL driver (sync) |
 | Pydantic | ≥ 2.6 | Data validation (RCAReport schema) |
 | pydantic-settings | ≥ 2.2 | Environment variable config |
 | Alembic | ≥ 1.13 | Database migrations |
@@ -1014,7 +1058,7 @@ Full nested Pydantic model. Key fields:
 | LangGraph | ≥ 0.2 | StateGraph pipeline (parse→analyze→store) |
 | LangChain | ≥ 0.3 | Message abstractions |
 | langchain-google-genai | ≥ 2.0 | Gemini LLM integration |
-| asyncpg | ≥ 0.29 | Async PostgreSQL driver |
+| aiomysql | ≥ 0.2 | Async MySQL driver |
 | watchdog | ≥ 4.0 | File system event monitoring |
 | FastAPI + Uvicorn | same | Datadog webhook server |
 | pydantic-settings | ≥ 2.0 | Config |
@@ -1023,7 +1067,7 @@ Full nested Pydantic model. Key fields:
 
 | Technology | Role |
 |---|---|
-| PostgreSQL 15 | Single database (`rca_db`) shared by all services |
+| MySQL 8.0+ | Single database (`rca_db`) shared by all services |
 | Docker Compose | Local orchestration of all 5 services |
 | nginx (alpine) | Serves demo UI static files |
 | Google Gemini 1.5 Flash | Error classification in ingestion agent |

@@ -26,8 +26,8 @@ except ImportError:
 
 
 DB_NAME   = "rca_db"
-APP_USER  = "root"
-APP_PASS  = "varun"        # matches MYSQL_PASSWORD in .env
+APP_USER  = "myuser"
+APP_PASS  = "mypassword"        # matches MYSQL_PASSWORD in .env
 APP_HOST  = "localhost"
 
 DDL = [

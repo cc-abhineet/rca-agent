@@ -10,7 +10,7 @@ CREATE DATABASE IF NOT EXISTS rca_db
     COLLATE utf8mb4_unicode_ci;
 
 -- 2. App user  (password matches MYSQL_PASSWORD in .env)
-CREATE USER IF NOT EXISTS 'rca'@'localhost' IDENTIFIED BY 'varun';
+CREATE USER IF NOT EXISTS 'rca'@'localhost' IDENTIFIED BY 'myuser';
 GRANT ALL PRIVILEGES ON rca_db.* TO 'rca'@'localhost';
 FLUSH PRIVILEGES;
 
