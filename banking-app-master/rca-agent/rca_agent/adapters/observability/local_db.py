@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from ...db import execute_one, json_loads
 from ...models import ErrorLogEntry
 
@@ -14,6 +14,14 @@ class LocalDBAdapter:
         stack_trace = json_loads(row["stack_trace"]) or []
         metadata = json_loads(row.get("metadata")) or {}
 
+        # MySQL DATETIME columns come back from PyMySQL as naive datetimes.
+        # The rest of the codebase (mock deployments, etc.) uses tz-aware UTC,
+        # so we normalize here at the adapter boundary. We assume stored timestamps
+        # are UTC, which matches NOW() on a UTC-configured MySQL server.
+        occurred_at = row["occurred_at"]
+        if occurred_at is not None and occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+
         return ErrorLogEntry(
             id=str(row["id"]),
             service_name=row["service_name"],
@@ -22,7 +30,7 @@ class LocalDBAdapter:
             error_message=row["error_message"],
             stack_trace=stack_trace,
             severity=row["severity"],
-            occurred_at=row["occurred_at"],
+            occurred_at=occurred_at,
             request_id=row.get("request_id"),
             metadata=metadata,
         )

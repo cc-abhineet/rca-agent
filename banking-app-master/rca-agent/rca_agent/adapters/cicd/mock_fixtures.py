@@ -1,5 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from ...models import DeploymentRecord
+
+# Use relative timestamps so the demo works regardless of when it's run.
+# The RepoResolver looks back 48 hours from occurred_at — since demo_seed_data.py
+# seeds occurred_at = NOW(), keeping deployments a few hours in the past
+# ensures they always fall inside that window.
+_NOW = datetime.now(timezone.utc)
 
 MOCK_DEPLOYMENTS: dict[str, list[DeploymentRecord]] = {
     "payment-service": [
@@ -8,9 +14,9 @@ MOCK_DEPLOYMENTS: dict[str, list[DeploymentRecord]] = {
             environment="production",
             github_repo="payment-service",
             branch="main",
-            commit_sha="REPLACE_WITH_REAL_SHA_AFTER_GIT_INIT",
+            commit_sha="1d3bcda3f0f36d0cf39dfa6a6734ad91468b31c1",
             commit_message="perf: streamline charge_card hot path",
-            deployed_at=datetime(2026, 5, 13, 10, 32, tzinfo=timezone.utc),
+            deployed_at=_NOW - timedelta(hours=6),
             deployer="jane.doe",
             pipeline_id="run-8821",
             pipeline_url="https://ci.internal/runs/8821",
@@ -23,9 +29,9 @@ MOCK_DEPLOYMENTS: dict[str, list[DeploymentRecord]] = {
             environment="production",
             github_repo="order-service",
             branch="main",
-            commit_sha="REPLACE_WITH_REAL_SHA_AFTER_GIT_INIT",
+            commit_sha="7f036bbf7c0159f0e5a631a0e2bb0ce51c6435be",
             commit_message="chore: upgrade dependencies, pydantic to v2",
-            deployed_at=datetime(2026, 5, 13, 9, 15, tzinfo=timezone.utc),
+            deployed_at=_NOW - timedelta(hours=7, minutes=15),
             deployer="bob.smith",
             pipeline_id="run-8819",
             pipeline_url="https://ci.internal/runs/8819",
@@ -38,9 +44,9 @@ MOCK_DEPLOYMENTS: dict[str, list[DeploymentRecord]] = {
             environment="staging",
             github_repo=None,  # intentionally absent — forces sub-agent discovery
             branch="main",
-            commit_sha="REPLACE_WITH_REAL_SHA_AFTER_GIT_INIT",
+            commit_sha="a3ec7a9227917cc776ff0d6c7d69f694cb920490",
             commit_message="refactor: simplify env var access",
-            deployed_at=datetime(2026, 5, 13, 8, 0, tzinfo=timezone.utc),
+            deployed_at=_NOW - timedelta(hours=8, minutes=30),
             deployer="alice.chen",
             pipeline_id="run-8815",
             pipeline_url="https://ci.internal/runs/8815",
