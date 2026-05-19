@@ -46,9 +46,11 @@ resource "aws_ecr_repository" "dd_agent" {
   tags = { Service = "dd-agent" }
 }
 
-# Lifecycle policy — keep only the last 10 images to control storage costs
-resource "aws_ecr_lifecycle_policy" "keep_last_10" {
-  for_each   = toset([
+# Lifecycle policy — keep only the last 3 tagged images and purge untagged ones
+# immediately. ECR gives 500 MB free; 4 repos × 3 images each stays well within
+# that limit for typical demo-sized images (~100-200 MB each).
+resource "aws_ecr_lifecycle_policy" "free_tier" {
+  for_each = toset([
     aws_ecr_repository.banking_app.name,
     aws_ecr_repository.ingestion_agent.name,
     aws_ecr_repository.rca_agent.name,
@@ -57,15 +59,29 @@ resource "aws_ecr_lifecycle_policy" "keep_last_10" {
   repository = each.value
 
   policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 10 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 10
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images immediately"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep last 3 tagged images to stay within ECR free tier (500 MB)"
+        selection = {
+          tagStatus   = "tagged"
+          tagPrefixList = ["latest", "v"]
+          countType   = "imageCountMoreThan"
+          countNumber = 3
+        }
+        action = { type = "expire" }
       }
-      action = { type = "expire" }
-    }]
+    ]
   })
 }

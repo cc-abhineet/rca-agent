@@ -14,8 +14,64 @@ resource "aws_ecs_cluster" "main" {
   name = "banking-app-cluster"
 
   setting {
+    # Disabled to avoid CloudWatch custom-metrics charges above the free tier.
+    # Re-enable for production with: value = "enabled"
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"
+  }
+}
+
+data "aws_ssm_parameter" "ecs_ami" {
+  name = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
+}
+
+resource "aws_iam_role" "ecs_instance" {
+  name = "banking-app-ecs-instance-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_instance_role" {
+  role       = aws_iam_role.ecs_instance.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_instance_ecr" {
+  role       = aws_iam_role.ecs_instance.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_instance_profile" "ecs_instance" {
+  name = "banking-app-ecs-instance-profile"
+  role = aws_iam_role.ecs_instance.name
+}
+
+resource "aws_instance" "ecs_instance" {
+  count                     = var.ecs_instance_count
+  ami                       = data.aws_ssm_parameter.ecs_ami.value
+  instance_type             = var.ecs_instance_type
+  subnet_id                 = aws_subnet.public[0].id
+  associate_public_ip_address = true
+  iam_instance_profile      = aws_iam_instance_profile.ecs_instance.name
+  vpc_security_group_ids    = [aws_security_group.ecs_tasks.id]
+
+  user_data = <<-EOF
+    #!/bin/bash
+    # Write cluster config before the ECS agent starts to avoid a timing race
+    echo "ECS_CLUSTER=${aws_ecs_cluster.main.name}" > /etc/ecs/ecs.config
+    # Restart the agent to ensure it picks up the config even if it started first
+    systemctl restart ecs
+  EOF
+
+  tags = {
+    Name = "banking-app-ecs-instance"
   }
 }
 
@@ -26,24 +82,20 @@ data "aws_caller_identity" "current" {}
 locals {
   ecr_base = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
 
-  banking_app_image    = "${local.ecr_base}/${aws_ecr_repository.banking_app.name}:${var.image_tag_banking_app}"
-  dd_agent_image       = "${local.ecr_base}/${aws_ecr_repository.dd_agent.name}:${var.image_tag_dd_agent}"
+  banking_app_image     = "${local.ecr_base}/${aws_ecr_repository.banking_app.name}:${var.image_tag_banking_app}"
+  dd_agent_image        = "${local.ecr_base}/${aws_ecr_repository.dd_agent.name}:${var.image_tag_dd_agent}"
   ingestion_agent_image = "${local.ecr_base}/${aws_ecr_repository.ingestion_agent.name}:${var.image_tag_ingestion_agent}"
-  rca_agent_image      = "${local.ecr_base}/${aws_ecr_repository.rca_agent.name}:${var.image_tag_rca_agent}"
-
-  # MySQL connection URL for Python services (password injected via secret at runtime)
-  # The ECS secret sets DATABASE_URL_PASSWORD; the app constructs the full URL.
-  # Alternatively, the full URL can be stored as a single secret — see AWS_DEPLOYMENT.md.
-  db_host = aws_db_instance.rca_db.address
-  db_url  = "mysql+pymysql://${var.rds_username}:PLACEHOLDER@${local.db_host}:3306/${var.rds_db_name}"
+  rca_agent_image       = "${local.ecr_base}/${aws_ecr_repository.rca_agent.name}:${var.image_tag_rca_agent}"
+  # DATABASE_URL is injected via the database-url SSM parameter (secrets[]) —
+  # see aws_ssm_parameter.database_url in secrets.tf. No plaintext local needed.
 }
 
 # ── Task Definition 1: banking-app + dd-agent sidecar ────────────────────────
 
 resource "aws_ecs_task_definition" "banking_app" {
   family                   = "banking-app"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
+  requires_compatibilities = ["EC2"]
+  network_mode             = "bridge"
   cpu                      = var.banking_app_cpu
   memory                   = var.banking_app_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
@@ -78,7 +130,7 @@ resource "aws_ecs_task_definition" "banking_app" {
       ]
 
       secrets = [
-        { name = "DD_API_KEY", valueFrom = aws_secretsmanager_secret.dd_api_key.arn },
+        { name = "DD_API_KEY", valueFrom = aws_ssm_parameter.dd_api_key.arn },
       ]
 
       mountPoints = [{ sourceVolume = "app-logs", containerPath = "/var/log/banking-app" }]
@@ -108,7 +160,7 @@ resource "aws_ecs_task_definition" "banking_app" {
       ]
 
       secrets = [
-        { name = "DD_API_KEY", valueFrom = aws_secretsmanager_secret.dd_api_key.arn },
+        { name = "DD_API_KEY", valueFrom = aws_ssm_parameter.dd_api_key.arn },
       ]
 
       mountPoints = [{ sourceVolume = "app-logs", containerPath = "/var/log/banking-app", readOnly = true }]
@@ -129,8 +181,8 @@ resource "aws_ecs_task_definition" "banking_app" {
 
 resource "aws_ecs_task_definition" "ingestion_agent" {
   family                   = "ingestion-agent"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
+  requires_compatibilities = ["EC2"]
+  network_mode             = "bridge"
   cpu                      = var.ingestion_agent_cpu
   memory                   = var.ingestion_agent_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
@@ -143,7 +195,6 @@ resource "aws_ecs_task_definition" "ingestion_agent" {
 
     environment = [
       { name = "MODE",                       value = "datadog_poll" },
-      { name = "DATABASE_URL",               value = local.db_url },
       { name = "DD_SITE",                    value = var.dd_site },
       { name = "DD_INITIAL_LOOKBACK_HOURS",  value = tostring(var.dd_initial_lookback_hours) },
       { name = "POLL_INTERVAL_SECONDS",      value = tostring(var.dd_poll_interval_seconds) },
@@ -153,9 +204,11 @@ resource "aws_ecs_task_definition" "ingestion_agent" {
     ]
 
     secrets = [
-      { name = "GEMINI_API_KEY", valueFrom = aws_secretsmanager_secret.gemini_api_key.arn },
-      { name = "DD_API_KEY",     valueFrom = aws_secretsmanager_secret.dd_api_key.arn },
-      { name = "DD_APP_KEY",     valueFrom = aws_secretsmanager_secret.dd_app_key.arn },
+      # DATABASE_URL contains the password — inject as a secret, not plaintext env var
+      { name = "DATABASE_URL",   valueFrom = aws_ssm_parameter.database_url.arn },
+      { name = "GEMINI_API_KEY", valueFrom = aws_ssm_parameter.gemini_api_key.arn },
+      { name = "DD_API_KEY",     valueFrom = aws_ssm_parameter.dd_api_key.arn },
+      { name = "DD_APP_KEY",     valueFrom = aws_ssm_parameter.dd_app_key.arn },
     ]
 
     logConfiguration = {
@@ -173,8 +226,8 @@ resource "aws_ecs_task_definition" "ingestion_agent" {
 
 resource "aws_ecs_task_definition" "rca_agent" {
   family                   = "rca-agent"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
+  requires_compatibilities = ["EC2"]
+  network_mode             = "bridge"
   cpu                      = var.rca_agent_cpu
   memory                   = var.rca_agent_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
@@ -188,19 +241,20 @@ resource "aws_ecs_task_definition" "rca_agent" {
     portMappings = [{ containerPort = 8000, protocol = "tcp" }]
 
     environment = [
-      { name = "DATABASE_URL",              value = local.db_url },
-      { name = "GITHUB_ORG",               value = var.github_org },
-      { name = "OBSERVABILITY_ADAPTER",    value = "local" },
-      { name = "CICD_ADAPTER",             value = "mock" },
-      { name = "RCA_POLL_ENABLED",         value = "true" },
+      { name = "GITHUB_ORG",                value = var.github_org },
+      { name = "OBSERVABILITY_ADAPTER",     value = "local" },
+      { name = "CICD_ADAPTER",              value = "mock" },
+      { name = "RCA_POLL_ENABLED",          value = "true" },
       { name = "RCA_POLL_INTERVAL_SECONDS", value = "30" },
-      { name = "MODEL",                    value = "claude-sonnet-4-6" },
-      { name = "MAX_REACT_ITERATIONS",     value = "20" },
+      { name = "MODEL",                     value = "claude-sonnet-4-6" },
+      { name = "MAX_REACT_ITERATIONS",      value = "20" },
     ]
 
     secrets = [
-      { name = "ANTHROPIC_API_KEY", valueFrom = aws_secretsmanager_secret.anthropic_api_key.arn },
-      { name = "GITHUB_PAT",        valueFrom = aws_secretsmanager_secret.github_pat.arn },
+      # DATABASE_URL contains the password — inject as a secret, not plaintext env var
+      { name = "DATABASE_URL",      valueFrom = aws_ssm_parameter.database_url.arn },
+      { name = "ANTHROPIC_API_KEY", valueFrom = aws_ssm_parameter.anthropic_api_key.arn },
+      { name = "GITHUB_PAT",        valueFrom = aws_ssm_parameter.github_pat.arn },
     ]
 
     logConfiguration = {
@@ -221,21 +275,7 @@ resource "aws_ecs_service" "banking_app" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.banking_app.arn
   desired_count   = 1
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = aws_subnet.private[*].id
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = false
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.banking_app.arn
-    container_name   = "banking-app"
-    container_port   = 8080
-  }
-
-  depends_on = [aws_lb_listener.http]
+  launch_type     = "EC2"
 }
 
 resource "aws_ecs_service" "ingestion_agent" {
@@ -243,13 +283,7 @@ resource "aws_ecs_service" "ingestion_agent" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.ingestion_agent.arn
   desired_count   = 1
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = aws_subnet.private[*].id
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = false
-  }
+  launch_type     = "EC2"
   # No load balancer — ingestion agent has no inbound HTTP in poll mode
 }
 
@@ -258,19 +292,5 @@ resource "aws_ecs_service" "rca_agent" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.rca_agent.arn
   desired_count   = 1
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = aws_subnet.private[*].id
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = false
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.rca_agent.arn
-    container_name   = "rca-agent"
-    container_port   = 8000
-  }
-
-  depends_on = [aws_lb_listener.http]
+  launch_type     = "EC2"
 }

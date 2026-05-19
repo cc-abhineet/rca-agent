@@ -23,9 +23,11 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Allow ECS to read our specific secrets (least-privilege)
+# Allow ECS to read SSM Parameter Store parameters (free tier — no per-secret charge)
+# SSM SecureString parameters encrypted with the default aws/ssm KMS key
+# are readable via ssm:GetParameters without an explicit kms:Decrypt grant.
 resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
-  name = "ecs-read-banking-app-secrets"
+  name = "ecs-read-banking-app-ssm-params"
   role = aws_iam_role.ecs_task_execution.id
 
   policy = jsonencode({
@@ -33,16 +35,17 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
     Statement = [{
       Effect = "Allow"
       Action = [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret",
+        "ssm:GetParameters",
+        "ssm:GetParameter",
       ]
       Resource = [
-        aws_secretsmanager_secret.anthropic_api_key.arn,
-        aws_secretsmanager_secret.github_pat.arn,
-        aws_secretsmanager_secret.gemini_api_key.arn,
-        aws_secretsmanager_secret.dd_api_key.arn,
-        aws_secretsmanager_secret.dd_app_key.arn,
-        aws_secretsmanager_secret.rds_password.arn,
+        aws_ssm_parameter.database_url.arn,
+        aws_ssm_parameter.anthropic_api_key.arn,
+        aws_ssm_parameter.github_pat.arn,
+        aws_ssm_parameter.gemini_api_key.arn,
+        aws_ssm_parameter.dd_api_key.arn,
+        aws_ssm_parameter.dd_app_key.arn,
+        aws_ssm_parameter.rds_password.arn,
       ]
     }]
   })
@@ -103,5 +106,5 @@ resource "aws_cloudwatch_log_group" "ingestion_agent" {
 
 resource "aws_cloudwatch_log_group" "rca_agent" {
   name              = "/ecs/banking-app/rca-agent"
-  retention_in_days = 30
+  retention_in_days = 7  # reduced from 30 to limit CloudWatch storage costs
 }

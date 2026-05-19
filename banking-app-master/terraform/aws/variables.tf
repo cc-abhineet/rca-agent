@@ -25,7 +25,7 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zones" {
-  description = "List of AZs to use (at least 2 required for ALB)"
+  description = "List of AZs to use for public subnets"
   type        = list(string)
   default     = ["us-east-1a", "us-east-1b"]
 }
@@ -89,13 +89,13 @@ variable "rds_username" {
 variable "banking_app_cpu" {
   description = "ECS task CPU units for banking-app task (1024 = 1 vCPU)"
   type        = number
-  default     = 1024
+  default     = 512
 }
 
 variable "banking_app_memory" {
   description = "ECS task memory in MiB for banking-app task"
   type        = number
-  default     = 2048
+  default     = 768  # Spring Boot (H2, no load) + dd-agent sidecar fits comfortably
 }
 
 variable "ingestion_agent_cpu" {
@@ -107,21 +107,36 @@ variable "ingestion_agent_cpu" {
 variable "ingestion_agent_memory" {
   description = "ECS task memory in MiB for ingestion-agent"
   type        = number
-  default     = 512
+  default     = 256
 }
 
 variable "rca_agent_cpu" {
   description = "ECS task CPU units for rca-agent"
   type        = number
-  default     = 512
+  default     = 256
 }
 
 variable "rca_agent_memory" {
   description = "ECS task memory in MiB for rca-agent"
   type        = number
-  default     = 1024
+  default     = 512
+}
+variable "ecs_instance_type" {
+  description = "EC2 instance type for the ECS container instance"
+  type        = string
+  # t3.micro (1 GiB) and t3.small (2 GiB) are both too small —
+  # the ECS-optimized AMI consumes ~1.1 GiB for OS + Docker + ECS agent,
+  # leaving only ~940 MiB on t3.small vs ~1.5 GiB needed for 3 tasks.
+  # t3.medium (4 GiB) leaves ~2.9 GiB for containers — comfortable for all 3.
+  # Note: t3.medium costs ~$30/month (NOT free tier).
+  default     = "t3.medium"
 }
 
+variable "ecs_instance_count" {
+  description = "Number of ECS EC2 instances to launch for the cluster"
+  type        = number
+  default     = 1
+}
 # ── GitHub ────────────────────────────────────────────────────────────────────
 
 variable "github_org" {

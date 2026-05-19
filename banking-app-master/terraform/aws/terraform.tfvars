@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# terraform/aws/terraform.tfvars.example
+#
+# Copy to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# terraform.tfvars is in .gitignore — never commit it.
+# Secrets (DD_API_KEY, ANTHROPIC_API_KEY, etc.) are NOT here — they live in
+# AWS Secrets Manager and are populated separately after terraform apply.
+# ─────────────────────────────────────────────────────────────────────────────
+
+aws_region         = "us-east-1"
+environment        = "production"
+github_org         = "oscorpAI"
+
+# Datadog site — must match where your account is registered
+dd_site            = "datadoghq.com"
+
+# RDS — password is stored in Secrets Manager, not here
+rds_instance_class = "db.t3.medium"
+
+# ECS sizing — increase for production workloads
+banking_app_cpu    = 1024
+banking_app_memory = 2048
+ingestion_agent_cpu    = 256
+ingestion_agent_memory = 512
+rca_agent_cpu      = 512
+rca_agent_memory   = 1024
+
+# Image tags — pin to a git SHA for reproducible deploys
+image_tag_banking_app     = "latest"
+image_tag_ingestion_agent = "latest"
+image_tag_rca_agent       = "latest"
+image_tag_dd_agent        = "latest"

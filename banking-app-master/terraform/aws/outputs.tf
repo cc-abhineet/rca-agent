@@ -2,29 +2,14 @@
 # terraform/aws/outputs.tf
 # ─────────────────────────────────────────────────────────────────────────────
 
-output "alb_dns_name" {
-  description = "ALB DNS name — use this as the entry point for all services"
-  value       = aws_lb.main.dns_name
+output "ecs_cluster_name" {
+  description = "ECS cluster name for the deployed services"
+  value       = aws_ecs_cluster.main.name
 }
 
-output "banking_app_url" {
-  description = "Banking app root URL (H2 console disabled in production)"
-  value       = "http://${aws_lb.main.dns_name}/"
-}
-
-output "rca_demo_url" {
-  description = "RCA agent demo UI URL"
-  value       = "http://${aws_lb.main.dns_name}/demo"
-}
-
-output "rca_health_url" {
-  description = "RCA agent health check URL"
-  value       = "http://${aws_lb.main.dns_name}/health"
-}
-
-output "banking_app_chaos_url" {
-  description = "Banking app chaos endpoint (POST /chaos/{scenario})"
-  value       = "http://${aws_lb.main.dns_name}/chaos/scenarios"
+output "ecs_instance_public_ip" {
+  description = "Public IP address of the ECS EC2 container instance"
+  value       = aws_instance.ecs_instance[0].public_ip
 }
 
 output "rds_endpoint" {
@@ -52,15 +37,18 @@ output "ecr_dd_agent_uri" {
   value       = aws_ecr_repository.dd_agent.repository_url
 }
 
-output "secret_arns" {
-  description = "Secrets Manager ARNs — populate these before starting ECS services"
+output "ssm_parameter_names" {
+  description = "SSM Parameter Store paths. rds_password and database_url are auto-populated by Terraform. The other five need manual overwrite (see Step 2 in AWS_DEPLOYMENT.md)."
   value = {
-    anthropic_api_key = aws_secretsmanager_secret.anthropic_api_key.arn
-    github_pat        = aws_secretsmanager_secret.github_pat.arn
-    gemini_api_key    = aws_secretsmanager_secret.gemini_api_key.arn
-    dd_api_key        = aws_secretsmanager_secret.dd_api_key.arn
-    dd_app_key        = aws_secretsmanager_secret.dd_app_key.arn
-    rds_password      = aws_secretsmanager_secret.rds_password.arn
+    # ── Auto-populated by Terraform (do NOT overwrite) ──
+    rds_password  = aws_ssm_parameter.rds_password.name
+    database_url  = aws_ssm_parameter.database_url.name
+    # ── Set manually after terraform apply ──
+    anthropic_api_key = aws_ssm_parameter.anthropic_api_key.name
+    github_pat        = aws_ssm_parameter.github_pat.name
+    gemini_api_key    = aws_ssm_parameter.gemini_api_key.name
+    dd_api_key        = aws_ssm_parameter.dd_api_key.name
+    dd_app_key        = aws_ssm_parameter.dd_app_key.name
   }
 }
 
@@ -68,9 +56,10 @@ output "next_steps" {
   description = "Post-apply checklist"
   value = <<-EOT
     ── Post-apply checklist ──────────────────────────────────────────────────
-    1. Populate Secrets Manager (see secret_arns output above):
-         aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"value":"<secret>"}'
-       Secrets to populate: anthropic_api_key, github_pat, gemini_api_key, dd_api_key, dd_app_key, rds_password
+    1. Populate SSM Parameter Store (see ssm_parameter_names output above):
+         aws ssm put-parameter --name <name> --value <secret> --type SecureString --overwrite
+       Parameters to set manually: anthropic_api_key, github_pat, gemini_api_key, dd_api_key, dd_app_key
+       (rds_password and database_url are auto-populated by Terraform — do NOT overwrite)
 
     2. Build and push images to ECR (see AWS_DEPLOYMENT.md for full commands):
          aws ecr get-login-password | docker login --username AWS --password-stdin <ecr_base>
@@ -86,8 +75,8 @@ output "next_steps" {
          alembic upgrade head
 
     5. Trigger a chaos scenario and watch the RCA report appear:
-         curl -X POST http://${aws_lb.main.dns_name}/chaos/null-pointer
-         open http://${aws_lb.main.dns_name}/demo
+         # Find the public IP for the rca-agent task in the ECS console or with AWS CLI.
+         # The rca-agent listens on port 8000 and the banking app listens on port 8080.
     ─────────────────────────────────────────────────────────────────────────
   EOT
 }

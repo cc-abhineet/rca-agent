@@ -4,9 +4,9 @@ This directory contains two separate Terraform configurations:
 
 ## terraform/aws/ — Full AWS Infrastructure
 
-Deploys the complete RCA platform to AWS ECS Fargate. See `AWS_DEPLOYMENT.md` for the full guide.
+Deploys the complete RCA platform to AWS ECS on EC2 container instances. See `AWS_DEPLOYMENT.md` for the full guide.
 
-Creates: VPC, RDS MySQL, ECS cluster (banking-app + ingestion-agent + rca-agent), ALB, ECR repos, Secrets Manager secrets, IAM roles.
+Creates: VPC, RDS MySQL, ECS cluster (banking-app + ingestion-agent + rca-agent), EC2 container instance, ECR repos, Secrets Manager secrets, IAM roles.
 
 ```bash
 cd terraform/aws
