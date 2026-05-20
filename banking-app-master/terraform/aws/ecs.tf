@@ -1,12 +1,26 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# terraform/aws/ecs.tf — ECS cluster, task definitions, and services
+# terraform/aws/ecs.tf — ECS cluster, task definitions, services, and the
+# three EC2 container instances that back them.
 #
-# Three ECS services:
-#   1. banking-app       — Spring Boot + Datadog agent sidecar (shared log volume)
-#   2. ingestion-agent   — Python poller (MODE=datadog_poll, polls Datadog Logs API)
-#   3. rca-agent         — Python FastAPI (RCA_POLL_ENABLED=true, polls RDS)
+# Topology: one ECS cluster, three EC2 hosts, one service per host.
 #
-# All secrets injected from Secrets Manager via ECS secrets[] references.
+#   ┌─ host_monitored_app  (var.monitored_app.instance_type — default t3.small)
+#   │    attribute:module == monitored-app
+#   │    runs the swappable monitored app (banking-app today) + dd-agent sidecar
+#   │
+#   ├─ host_ingestion_agent (var.ingestion_instance_type — default t3.micro)
+#   │    attribute:module == ingestion-agent
+#   │    runs the Python poller; no inbound traffic
+#   │
+#   └─ host_rca_agent       (var.rca_instance_type — default t3.small)
+#        attribute:module == rca-agent
+#        runs FastAPI + Claude ReAct loop on port 8000
+#
+# Each ECS service uses a `memberOf(attribute:module == X)` placement
+# constraint, so tasks are pinned to the host that matches the module
+# attribute the user_data writes into /etc/ecs/ecs.config.
+#
+# All secrets injected from SSM Parameter Store via ECS secrets[] references.
 # No plaintext credentials in task definitions or images.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -24,6 +38,10 @@ resource "aws_ecs_cluster" "main" {
 data "aws_ssm_parameter" "ecs_ami" {
   name = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
 }
+
+# ── IAM for the EC2 container instances ──────────────────────────────────────
+# Shared across all three hosts — the same role/profile is fine because every
+# host needs the same set of permissions (register with ECS, pull from ECR).
 
 resource "aws_iam_role" "ecs_instance" {
   name = "banking-app-ecs-instance-role"
@@ -48,30 +66,108 @@ resource "aws_iam_role_policy_attachment" "ecs_instance_ecr" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# SSM access — lets you `aws ssm start-session` into each host for debugging
+# when ECS Exec into a task isn't possible (e.g. tasks failing to start).
+resource "aws_iam_role_policy_attachment" "ecs_instance_ssm" {
+  role       = aws_iam_role.ecs_instance.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "ecs_instance" {
   name = "banking-app-ecs-instance-profile"
   role = aws_iam_role.ecs_instance.name
 }
 
-resource "aws_instance" "ecs_instance" {
-  count                     = var.ecs_instance_count
-  ami                       = data.aws_ssm_parameter.ecs_ami.value
-  instance_type             = var.ecs_instance_type
-  subnet_id                 = aws_subnet.public[0].id
-  associate_public_ip_address = true
-  iam_instance_profile      = aws_iam_instance_profile.ecs_instance.name
-  vpc_security_group_ids    = [aws_security_group.ecs_tasks.id]
+# ── user_data template ──────────────────────────────────────────────────────
+# Writes ECS_CLUSTER and ECS_INSTANCE_ATTRIBUTES into /etc/ecs/ecs.config
+# before the ECS agent starts. The attributes are how `placement_constraints`
+# below pins each ECS service to its dedicated host.
 
-  user_data = <<-EOF
-    #!/bin/bash
-    # Write cluster config before the ECS agent starts to avoid a timing race
-    echo "ECS_CLUSTER=${aws_ecs_cluster.main.name}" > /etc/ecs/ecs.config
-    # Restart the agent to ensure it picks up the config even if it started first
-    systemctl restart ecs
-  EOF
+locals {
+  user_data = {
+    monitored_app    = <<-EOT
+      #!/bin/bash
+      set -x
+      exec > /var/log/user-data.log 2>&1
+      mkdir -p /etc/ecs
+      cat >> /etc/ecs/ecs.config <<CFG
+      ECS_CLUSTER=${aws_ecs_cluster.main.name}
+      ECS_INSTANCE_ATTRIBUTES={"module":"monitored-app"}
+      ECS_ENABLE_TASK_IAM_ROLE=true
+      CFG
+      systemctl enable --now ecs || start ecs || true
+    EOT
+    ingestion_agent  = <<-EOT
+      #!/bin/bash
+      set -x
+      exec > /var/log/user-data.log 2>&1
+      mkdir -p /etc/ecs
+      cat >> /etc/ecs/ecs.config <<CFG
+      ECS_CLUSTER=${aws_ecs_cluster.main.name}
+      ECS_INSTANCE_ATTRIBUTES={"module":"ingestion-agent"}
+      ECS_ENABLE_TASK_IAM_ROLE=true
+      CFG
+      systemctl enable --now ecs || start ecs || true
+    EOT
+    rca_agent        = <<-EOT
+      #!/bin/bash
+      set -x
+      exec > /var/log/user-data.log 2>&1
+      mkdir -p /etc/ecs
+      cat >> /etc/ecs/ecs.config <<CFG
+      ECS_CLUSTER=${aws_ecs_cluster.main.name}
+      ECS_INSTANCE_ATTRIBUTES={"module":"rca-agent"}
+      ECS_ENABLE_TASK_IAM_ROLE=true
+      CFG
+      systemctl enable --now ecs || start ecs || true
+    EOT
+  }
+}
+
+# ── EC2 container instances — one per service ────────────────────────────────
+
+resource "aws_instance" "host_monitored_app" {
+  ami                         = data.aws_ssm_parameter.ecs_ami.value
+  instance_type               = var.monitored_app.instance_type
+  subnet_id                   = aws_subnet.public[0].id
+  associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.ecs_instance.name
+  vpc_security_group_ids      = [aws_security_group.monitored_app.id]
+  user_data                   = local.user_data.monitored_app
 
   tags = {
-    Name = "banking-app-ecs-instance"
+    Name   = "banking-app-host-monitored-app"
+    Module = "monitored-app"
+  }
+}
+
+resource "aws_instance" "host_ingestion_agent" {
+  ami                         = data.aws_ssm_parameter.ecs_ami.value
+  instance_type               = var.ingestion_instance_type
+  subnet_id                   = aws_subnet.public[0].id
+  associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.ecs_instance.name
+  vpc_security_group_ids      = [aws_security_group.ingestion_agent.id]
+  user_data                   = local.user_data.ingestion_agent
+
+  tags = {
+    Name   = "banking-app-host-ingestion-agent"
+    Module = "ingestion-agent"
+  }
+}
+
+resource "aws_instance" "host_rca_agent" {
+  ami                         = data.aws_ssm_parameter.ecs_ami.value
+  instance_type               = var.rca_instance_type
+  subnet_id                   = aws_subnet.public[0].id
+  associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.ecs_instance.name
+  vpc_security_group_ids      = [aws_security_group.rca_agent.id]
+  user_data                   = local.user_data.rca_agent
+
+  tags = {
+    Name   = "banking-app-host-rca-agent"
+    Module = "rca-agent"
   }
 }
 
@@ -82,99 +178,104 @@ data "aws_caller_identity" "current" {}
 locals {
   ecr_base = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
 
-  banking_app_image     = "${local.ecr_base}/${aws_ecr_repository.banking_app.name}:${var.image_tag_banking_app}"
+  monitored_app_image   = "${local.ecr_base}/${var.monitored_app.image_repo_name}:${var.monitored_app.image_tag}"
   dd_agent_image        = "${local.ecr_base}/${aws_ecr_repository.dd_agent.name}:${var.image_tag_dd_agent}"
   ingestion_agent_image = "${local.ecr_base}/${aws_ecr_repository.ingestion_agent.name}:${var.image_tag_ingestion_agent}"
   rca_agent_image       = "${local.ecr_base}/${aws_ecr_repository.rca_agent.name}:${var.image_tag_rca_agent}"
   # DATABASE_URL is injected via the database-url SSM parameter (secrets[]) —
   # see aws_ssm_parameter.database_url in secrets.tf. No plaintext local needed.
+
+  # Merge platform-mandated env vars with whatever the app needs.
+  monitored_app_env = concat(
+    [
+      { name = "DD_ENV",     value = var.environment },
+      { name = "DD_SERVICE", value = var.monitored_app.service_name },
+    ],
+    [for k, v in var.monitored_app.extra_env : { name = k, value = v }],
+  )
+
+  # The dd-agent sidecar is conditionally appended to the monitored-app task.
+  # Keep the attribute shape identical to the monitored-app container above so
+  # `concat()` can unify the two objects without type drift.
+  dd_agent_container = {
+    name      = "dd-agent"
+    image     = local.dd_agent_image
+    essential = false  # the monitored app keeps running if dd-agent dies
+
+    portMappings = []
+
+    environment = [
+      { name = "DD_SITE",                              value = var.dd_site },
+      { name = "DD_LOGS_ENABLED",                      value = "true" },
+      { name = "DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL", value = "false" },
+      { name = "DD_APM_ENABLED",                       value = "false" },
+      { name = "DD_PROCESS_AGENT_ENABLED",             value = "false" },
+    ]
+
+    secrets = [
+      { name = "DD_API_KEY", valueFrom = aws_ssm_parameter.dd_api_key.arn },
+    ]
+
+    mountPoints = [{ sourceVolume = "app-logs", containerPath = "/var/log/banking-app", readOnly = true }]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.dd_agent.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "dd-agent"
+      }
+    }
+  }
 }
 
-# ── Task Definition 1: banking-app + dd-agent sidecar ────────────────────────
+# ── Task Definition 1: monitored app (+ optional dd-agent sidecar) ───────────
 
-resource "aws_ecs_task_definition" "banking_app" {
-  family                   = "banking-app"
+resource "aws_ecs_task_definition" "monitored_app" {
+  family                   = var.monitored_app.service_name
   requires_compatibilities = ["EC2"]
   network_mode             = "bridge"
-  cpu                      = var.banking_app_cpu
-  memory                   = var.banking_app_memory
+  cpu                      = var.monitored_app.task_cpu
+  memory                   = var.monitored_app.task_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
-  # Shared ephemeral volume: banking-app writes logs here; dd-agent reads them
+  # Shared ephemeral volume: the monitored app writes logs here; dd-agent reads.
+  # Declared unconditionally so the task definition stays shape-stable across
+  # apps that don't use the sidecar — an unmounted volume costs nothing.
   volume {
     name = "app-logs"
   }
 
-  container_definitions = jsonencode([
-    # ── banking-app ──
-    {
-      name      = "banking-app"
-      image     = local.banking_app_image
-      essential = true
+  container_definitions = jsonencode(concat(
+    [
+      {
+        name      = var.monitored_app.service_name
+        image     = local.monitored_app_image
+        essential = true
 
-      portMappings = [{ containerPort = 8080, protocol = "tcp" }]
+        portMappings = [{ containerPort = var.monitored_app.port, protocol = "tcp" }]
 
-      environment = [
-        { name = "SPRING_DATASOURCE_URL",               value = "jdbc:h2:mem:bankingdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE" },
-        { name = "SPRING_DATASOURCE_DRIVER_CLASS_NAME", value = "org.h2.Driver" },
-        { name = "SPRING_DATASOURCE_USERNAME",          value = "sa" },
-        { name = "SPRING_DATASOURCE_PASSWORD",          value = "" },
-        { name = "SPRING_JPA_DATABASE_PLATFORM",        value = "org.hibernate.dialect.H2Dialect" },
-        { name = "SPRING_H2_CONSOLE_ENABLED",           value = "false" },
-        { name = "LOGGING_FILE_NAME",                   value = "/var/log/banking-app/app.log" },
-        { name = "DD_ENV",                              value = var.environment },
-        { name = "DD_SERVICE",                          value = "banking-app" },
-        { name = "DD_VERSION",                          value = "1.0.0" },
-        { name = "DD_LOGS_INJECTION",                   value = "true" },
-      ]
+        environment = local.monitored_app_env
 
-      secrets = [
-        { name = "DD_API_KEY", valueFrom = aws_ssm_parameter.dd_api_key.arn },
-      ]
+        secrets = [
+          { name = "DD_API_KEY", valueFrom = aws_ssm_parameter.dd_api_key.arn },
+        ]
 
-      mountPoints = [{ sourceVolume = "app-logs", containerPath = "/var/log/banking-app" }]
+        mountPoints = [{ sourceVolume = "app-logs", containerPath = "/var/log/banking-app" }]
 
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.banking_app.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "banking-app"
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            "awslogs-group"         = aws_cloudwatch_log_group.monitored_app.name
+            "awslogs-region"        = var.aws_region
+            "awslogs-stream-prefix" = var.monitored_app.service_name
+          }
         }
-      }
-    },
-
-    # ── Datadog agent sidecar ──
-    {
-      name      = "dd-agent"
-      image     = local.dd_agent_image
-      essential = false  # banking-app keeps running if dd-agent dies
-
-      environment = [
-        { name = "DD_SITE",                             value = var.dd_site },
-        { name = "DD_LOGS_ENABLED",                     value = "true" },
-        { name = "DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL", value = "false" },
-        { name = "DD_APM_ENABLED",                      value = "false" },
-        { name = "DD_PROCESS_AGENT_ENABLED",            value = "false" },
-      ]
-
-      secrets = [
-        { name = "DD_API_KEY", valueFrom = aws_ssm_parameter.dd_api_key.arn },
-      ]
-
-      mountPoints = [{ sourceVolume = "app-logs", containerPath = "/var/log/banking-app", readOnly = true }]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.dd_agent.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "dd-agent"
-        }
-      }
-    }
-  ])
+      },
+    ],
+    var.monitored_app.needs_dd_sidecar ? [local.dd_agent_container] : [],
+  ))
 }
 
 # ── Task Definition 2: error-ingestion-agent ──────────────────────────────────
@@ -199,7 +300,7 @@ resource "aws_ecs_task_definition" "ingestion_agent" {
       { name = "DD_INITIAL_LOOKBACK_HOURS",  value = tostring(var.dd_initial_lookback_hours) },
       { name = "POLL_INTERVAL_SECONDS",      value = tostring(var.dd_poll_interval_seconds) },
       { name = "PROJECTS_YAML_PATH",         value = "/app/projects.yaml" },
-      { name = "SERVICE_NAME",               value = "banking-app" },
+      { name = "SERVICE_NAME",               value = var.monitored_app.service_name },
       { name = "ENVIRONMENT",                value = var.environment },
     ]
 
@@ -268,14 +369,23 @@ resource "aws_ecs_task_definition" "rca_agent" {
   }])
 }
 
-# ── ECS Services ──────────────────────────────────────────────────────────────
+# ── ECS Services — pinned to dedicated hosts via placement_constraints ───────
 
-resource "aws_ecs_service" "banking_app" {
-  name            = "banking-app"
+resource "aws_ecs_service" "monitored_app" {
+  name            = var.monitored_app.service_name
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.banking_app.arn
+  task_definition = aws_ecs_task_definition.monitored_app.arn
   desired_count   = 1
   launch_type     = "EC2"
+
+  placement_constraints {
+    type       = "memberOf"
+    expression = "attribute:module == monitored-app"
+  }
+
+  # Ensure the EC2 host has registered with the cluster before ECS tries to
+  # schedule a task that depends on its attribute.
+  depends_on = [aws_instance.host_monitored_app]
 }
 
 resource "aws_ecs_service" "ingestion_agent" {
@@ -285,6 +395,13 @@ resource "aws_ecs_service" "ingestion_agent" {
   desired_count   = 1
   launch_type     = "EC2"
   # No load balancer — ingestion agent has no inbound HTTP in poll mode
+
+  placement_constraints {
+    type       = "memberOf"
+    expression = "attribute:module == ingestion-agent"
+  }
+
+  depends_on = [aws_instance.host_ingestion_agent]
 }
 
 resource "aws_ecs_service" "rca_agent" {
@@ -293,4 +410,11 @@ resource "aws_ecs_service" "rca_agent" {
   task_definition = aws_ecs_task_definition.rca_agent.arn
   desired_count   = 1
   launch_type     = "EC2"
+
+  placement_constraints {
+    type       = "memberOf"
+    expression = "attribute:module == rca-agent"
+  }
+
+  depends_on = [aws_instance.host_rca_agent]
 }

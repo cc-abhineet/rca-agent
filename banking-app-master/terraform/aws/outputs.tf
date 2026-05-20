@@ -7,9 +7,23 @@ output "ecs_cluster_name" {
   value       = aws_ecs_cluster.main.name
 }
 
-output "ecs_instance_public_ip" {
-  description = "Public IP address of the ECS EC2 container instance"
-  value       = aws_instance.ecs_instance[0].public_ip
+# ── Per-host public IPs ──────────────────────────────────────────────────────
+# Each service runs on its own EC2 host. Use the matching IP for each
+# health-check / smoke test in AWS_DEPLOYMENT.md.
+
+output "monitored_app_public_ip" {
+  description = "Public IP of the host running the monitored application — exposed on var.monitored_app.port (default 8080)"
+  value       = aws_instance.host_monitored_app.public_ip
+}
+
+output "ingestion_agent_public_ip" {
+  description = "Public IP of the ingestion-agent host (no inbound ports — for SSH/debug only)"
+  value       = aws_instance.host_ingestion_agent.public_ip
+}
+
+output "rca_agent_public_ip" {
+  description = "Public IP of the rca-agent host (FastAPI on port 8000)"
+  value       = aws_instance.host_rca_agent.public_ip
 }
 
 output "rds_endpoint" {
@@ -17,9 +31,9 @@ output "rds_endpoint" {
   value       = aws_db_instance.rca_db.address
 }
 
-output "ecr_banking_app_uri" {
-  description = "ECR URI for banking-app — use in docker push commands"
-  value       = aws_ecr_repository.banking_app.repository_url
+output "ecr_monitored_app_uri" {
+  description = "ECR URI for the monitored-app image — use in docker push commands"
+  value       = aws_ecr_repository.monitored_app.repository_url
 }
 
 output "ecr_ingestion_agent_uri" {
@@ -56,6 +70,11 @@ output "next_steps" {
   description = "Post-apply checklist"
   value = <<-EOT
     ── Post-apply checklist ──────────────────────────────────────────────────
+    Three EC2 hosts have been provisioned, one per service:
+      • monitored-app   → ${aws_instance.host_monitored_app.public_ip}   (port ${var.monitored_app.port})
+      • ingestion-agent → ${aws_instance.host_ingestion_agent.public_ip} (no inbound)
+      • rca-agent       → ${aws_instance.host_rca_agent.public_ip}       (port 8000)
+
     1. Populate SSM Parameter Store (see ssm_parameter_names output above):
          aws ssm put-parameter --name <name> --value <secret> --type SecureString --overwrite
        Parameters to set manually: anthropic_api_key, github_pat, gemini_api_key, dd_api_key, dd_app_key
@@ -63,7 +82,7 @@ output "next_steps" {
 
     2. Build and push images to ECR (see AWS_DEPLOYMENT.md for full commands):
          aws ecr get-login-password | docker login --username AWS --password-stdin <ecr_base>
-         docker build -t banking-app . && docker push <ecr_banking_app_uri>:latest
+         docker build -t ${var.monitored_app.service_name} . && docker push <ecr_monitored_app_uri>:${var.monitored_app.image_tag}
          docker build -f error-ingestion-agent/Dockerfile -t ingestion-agent . && docker push <ecr_ingestion_agent_uri>:latest
          docker build -t rca-agent ./rca-agent && docker push <ecr_rca_agent_uri>:latest
          docker build -t dd-agent ./datadog && docker push <ecr_dd_agent_uri>:latest
@@ -74,9 +93,9 @@ output "next_steps" {
     4. Run alembic migrations (from inside the rca-agent container or via ECS exec):
          alembic upgrade head
 
-    5. Trigger a chaos scenario and watch the RCA report appear:
-         # Find the public IP for the rca-agent task in the ECS console or with AWS CLI.
-         # The rca-agent listens on port 8000 and the banking app listens on port 8080.
+    5. Verify each service is up on its own host:
+         curl http://${aws_instance.host_monitored_app.public_ip}:${var.monitored_app.port}/actuator/health
+         curl http://${aws_instance.host_rca_agent.public_ip}:8000/health
     ─────────────────────────────────────────────────────────────────────────
   EOT
 }

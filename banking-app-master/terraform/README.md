@@ -4,9 +4,11 @@ This directory contains two separate Terraform configurations:
 
 ## terraform/aws/ — Full AWS Infrastructure
 
-Deploys the complete RCA platform to AWS ECS on EC2 container instances. See `AWS_DEPLOYMENT.md` for the full guide.
+Deploys the complete RCA platform to AWS ECS on **three EC2 container instances — one per service**. Each service is pinned to its dedicated host via ECS placement constraints (`attribute:module == ...`), and each host is right-sized to its task's memory needs. See `AWS_DEPLOYMENT.md` for the full guide.
 
-Creates: VPC, RDS MySQL, ECS cluster (banking-app + ingestion-agent + rca-agent), EC2 container instance, ECR repos, Secrets Manager secrets, IAM roles.
+Creates: VPC, RDS MySQL, ECS cluster with three EC2 hosts (`monitored-app`, `ingestion-agent`, `rca-agent`), four ECR repos, per-host security groups, SSM Parameter Store secrets, IAM roles.
+
+The **monitored-app slot is fully parameterized** via the `monitored_app` object variable — swap banking-app for any other service by editing one block in `terraform.tfvars` (image, port, sizing, env vars, optional Datadog sidecar). The ingestion-agent and rca-agent hosts are untouched by an app swap.
 
 ```bash
 cd terraform/aws

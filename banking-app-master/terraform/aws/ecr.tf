@@ -2,20 +2,24 @@
 # terraform/aws/ecr.tf — ECR repositories for all service images
 # ─────────────────────────────────────────────────────────────────────────────
 
-resource "aws_ecr_repository" "banking_app" {
-  name                 = "banking-app"
+# Monitored-app ECR repo — name follows var.monitored_app.image_repo_name so
+# swapping the monitored app provisions a fresh repo for the new image.
+resource "aws_ecr_repository" "monitored_app" {
+  name                 = var.monitored_app.image_repo_name
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
   }
 
-  tags = { Service = "banking-app" }
+  tags = { Service = var.monitored_app.service_name }
 }
 
 resource "aws_ecr_repository" "ingestion_agent" {
   name                 = "banking-app/ingestion-agent"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -27,6 +31,7 @@ resource "aws_ecr_repository" "ingestion_agent" {
 resource "aws_ecr_repository" "rca_agent" {
   name                 = "banking-app/rca-agent"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -38,6 +43,7 @@ resource "aws_ecr_repository" "rca_agent" {
 resource "aws_ecr_repository" "dd_agent" {
   name                 = "banking-app/dd-agent"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -51,7 +57,7 @@ resource "aws_ecr_repository" "dd_agent" {
 # that limit for typical demo-sized images (~100-200 MB each).
 resource "aws_ecr_lifecycle_policy" "free_tier" {
   for_each = toset([
-    aws_ecr_repository.banking_app.name,
+    aws_ecr_repository.monitored_app.name,
     aws_ecr_repository.ingestion_agent.name,
     aws_ecr_repository.rca_agent.name,
     aws_ecr_repository.dd_agent.name,

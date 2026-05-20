@@ -234,9 +234,11 @@ To monitor a different application: edit `projects.yaml`, rebuild the ingestion-
 | Datadog integration mode | Logs API polling (not webhook) | No public endpoint needed; cursor-based, resumable on restart |
 | Banking-app DB | H2 in-memory | Simplicity for demo; no external DB needed for the banking app itself |
 | RCA agent trigger | Background poll thread | No HTTP trigger from ingestion needed; simpler ops |
-| Secrets management | AWS Secrets Manager | No secrets in images or files; ECS injects at task start |
+| Secrets management | AWS SSM Parameter Store | No secrets in images or files; ECS injects at task start; free tier |
 | projects.yaml | Baked into image | Service list stable at deploy time; swap by rebuilding image |
 | Error deduplication | Not implemented | At-least-once + separate UUID per row is acceptable for demo |
+| AWS topology | One EC2 host per service (pinned via ECS placement constraints) | Per-service failure domain; right-size RAM per task; monitored-app slot is fully parameterized via `var.monitored_app` so banking-app can be swapped for any other service without touching the ingestion-agent / rca-agent hosts |
+| Cross-host log ingestion (AWS) | `MODE=datadog_poll` | No shared volume across EC2 instances — dd-agent ships logs to Datadog from the monitored-app host, ingestion-agent pulls them back via the Logs API |
 
 ---
 

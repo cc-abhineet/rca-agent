@@ -89,8 +89,8 @@ resource "aws_iam_role_policy" "ecs_task_cloudwatch" {
 
 # ── CloudWatch Log Groups ──────────────────────────────────────────────────────
 
-resource "aws_cloudwatch_log_group" "banking_app" {
-  name              = "/ecs/banking-app/banking-app"
+resource "aws_cloudwatch_log_group" "monitored_app" {
+  name              = "/ecs/banking-app/${var.monitored_app.service_name}"
   retention_in_days = 14
 }
 

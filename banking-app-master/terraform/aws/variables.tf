@@ -31,14 +31,8 @@ variable "availability_zones" {
 }
 
 # ── ECR image tags ────────────────────────────────────────────────────────────
-# These default to 'latest' so you can do a quick first deploy.
-# Pin to a specific git SHA in production: image_tag_banking_app = "abc1234"
-
-variable "image_tag_banking_app" {
-  description = "Docker image tag for banking-app (pushed to ECR)"
-  type        = string
-  default     = "latest"
-}
+# The monitored-app's image tag lives inside var.monitored_app (see below).
+# These two are for the platform's own services and rarely change.
 
 variable "image_tag_ingestion_agent" {
   description = "Docker image tag for error-ingestion-agent"
@@ -84,19 +78,64 @@ variable "rds_username" {
   default     = "rcaadmin"
 }
 
-# ── ECS ───────────────────────────────────────────────────────────────────────
+# ── Monitored application (swappable) ─────────────────────────────────────────
+# The "monitored app" is the source of errors the RCA pipeline analyses.
+# It runs on a dedicated EC2 host so it can be replaced wholesale without
+# touching the ingestion-agent or rca-agent hosts.
+#
+# To swap banking-app for a different application:
+#   1. Push the new image to ECR (or to a different registry — adjust
+#      `image_repo_name` and the ECR repos in ecr.tf accordingly).
+#   2. Edit this block in terraform.tfvars: service_name, image_repo_name,
+#      image_tag, port, task_cpu, task_memory, instance_type, needs_dd_sidecar,
+#      extra_env.
+#   3. terraform apply.
+#
+# The ingestion-agent and rca-agent hosts are unaffected by an app swap.
 
-variable "banking_app_cpu" {
-  description = "ECS task CPU units for banking-app task (1024 = 1 vCPU)"
-  type        = number
-  default     = 512
+variable "monitored_app" {
+  description = "Configuration for the monitored application (the source of errors the RCA pipeline analyses). Swap this block to point the platform at a different app."
+
+  type = object({
+    service_name     = string       # tag/label used in env vars, logs, DD
+    image_repo_name  = string       # ECR repository name for the app image
+    image_tag        = string       # ECR image tag (e.g. "latest" or a git SHA)
+    port             = number       # public TCP port exposed by the app
+    task_cpu         = number       # ECS task CPU units (1024 = 1 vCPU)
+    task_memory      = number       # ECS task memory in MiB
+    instance_type    = string       # EC2 instance type for this host
+    needs_dd_sidecar = bool         # true to colocate the Datadog agent sidecar
+    extra_env        = map(string)  # app-specific environment variables
+  })
+
+  default = {
+    service_name     = "banking-app"
+    image_repo_name  = "banking-app"
+    image_tag        = "latest"
+    port             = 8080
+    task_cpu         = 512
+    task_memory      = 768  # Spring Boot (H2, no load) + dd-agent sidecar fits comfortably
+    # t3.small (2 GiB) leaves ~940 MiB after the ECS-optimized AMI's
+    # ~1.1 GiB OS + Docker + ECS-agent overhead — comfortable for the
+    # 768 MiB Spring Boot task. t3.micro (1 GiB) is too tight for Java.
+    instance_type    = "t3.small"
+    needs_dd_sidecar = true
+    extra_env = {
+      SPRING_DATASOURCE_URL               = "jdbc:h2:mem:bankingdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME = "org.h2.Driver"
+      SPRING_DATASOURCE_USERNAME          = "sa"
+      SPRING_DATASOURCE_PASSWORD          = ""
+      SPRING_JPA_DATABASE_PLATFORM        = "org.hibernate.dialect.H2Dialect"
+      SPRING_H2_CONSOLE_ENABLED           = "false"
+      LOGGING_FILE_NAME                   = "/var/log/banking-app/app.log"
+      DD_VERSION                          = "1.0.0"
+      DD_LOGS_INJECTION                   = "true"
+    }
+  }
 }
 
-variable "banking_app_memory" {
-  description = "ECS task memory in MiB for banking-app task"
-  type        = number
-  default     = 768  # Spring Boot (H2, no load) + dd-agent sidecar fits comfortably
-}
+# ── ECS task sizing for platform services ────────────────────────────────────
+# These two services are part of the platform itself and rarely need tuning.
 
 variable "ingestion_agent_cpu" {
   description = "ECS task CPU units for ingestion-agent"
@@ -121,22 +160,27 @@ variable "rca_agent_memory" {
   type        = number
   default     = 512
 }
-variable "ecs_instance_type" {
-  description = "EC2 instance type for the ECS container instance"
+
+# ── Per-host EC2 sizing ──────────────────────────────────────────────────────
+# Each service runs on its own EC2 container instance. Right-size each host
+# to its task's memory footprint plus ~1.1 GiB of ECS-optimized AMI overhead
+# (OS + Docker + ECS agent).
+#
+# The monitored-app host's instance type lives inside var.monitored_app so
+# it can be tuned per swappable app. These two are for the platform.
+
+variable "ingestion_instance_type" {
+  description = "EC2 instance type for the ingestion-agent host. t3.micro (1 GiB) leaves ~460 MiB for the 256 MiB Python poller — comfortable, and free-tier eligible."
   type        = string
-  # t3.micro (1 GiB) and t3.small (2 GiB) are both too small —
-  # the ECS-optimized AMI consumes ~1.1 GiB for OS + Docker + ECS agent,
-  # leaving only ~940 MiB on t3.small vs ~1.5 GiB needed for 3 tasks.
-  # t3.medium (4 GiB) leaves ~2.9 GiB for containers — comfortable for all 3.
-  # Note: t3.medium costs ~$30/month (NOT free tier).
-  default     = "t3.medium"
+  default     = "t3.micro"
 }
 
-variable "ecs_instance_count" {
-  description = "Number of ECS EC2 instances to launch for the cluster"
-  type        = number
-  default     = 1
+variable "rca_instance_type" {
+  description = "EC2 instance type for the rca-agent host. t3.small (2 GiB) leaves ~940 MiB for the 512 MiB FastAPI task with comfortable headroom for Claude API responses."
+  type        = string
+  default     = "t3.small"
 }
+
 # ── GitHub ────────────────────────────────────────────────────────────────────
 
 variable "github_org" {
