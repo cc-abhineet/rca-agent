@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console: JSON via LogstashEncoder (same as banking-app) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <!-- Inject dd.trace_id / dd.span_id for APM log correlation -->
+            <includeMdcKeyName>dd.trace_id</includeMdcKeyName>
+            <includeMdcKeyName>dd.span_id</includeMdcKeyName>
+            <includeMdcKeyName>dd.service</includeMdcKeyName>
+            <includeMdcKeyName>dd.env</includeMdcKeyName>
+            <includeMdcKeyName>dd.version</includeMdcKeyName>
+            <customFields>{"service":"pricing-service"}</customFields>
+        </encoder>
+    </appender>
+
+    <!-- File: plain text — readable by error-ingestion-agent log_parser.py -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOGGING_FILE_NAME:-/var/log/pricing-service/app.log}</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOGGING_FILE_NAME:-/var/log/pricing-service/app}.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n%ex</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+    <logger name="com.demo.pricing" level="DEBUG"/>
+</configuration>

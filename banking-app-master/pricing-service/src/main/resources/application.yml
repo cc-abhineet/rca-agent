@@ -1,0 +1,26 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: pricing-service
+
+# ─── Actuator ────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.demo.pricing: DEBUG
+  # Log file path — overridden by LOGGING_FILE_NAME env var in Docker/ECS.
+  # The Datadog agent sidecar tails this file.
+  file:
+    name: /var/log/pricing-service/app.log

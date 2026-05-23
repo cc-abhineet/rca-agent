@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     observability_adapter: str = "local"   # "local" | "datadog"
     cicd_adapter: str = "mock"             # "mock" | "real"
 
+    # ── Cross-service memory ──────────────────────────────────────────────────
+    # Path to the JSON file where the agent persists discovered service→repo deps.
+    # Relative to CWD when the agent starts; override with env var DEPENDENCY_MEMORY_PATH.
+    dependency_memory_path: str = "dependency_memory.json"
+
     # ── DB poll mode ──────────────────────────────────────────────────────────
     # When rca_poll_enabled=true the agent starts a background thread that scans
     # error_logs for pending rows and runs RCA automatically — no HTTP trigger

@@ -1,0 +1,30 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: order-service
+
+# ─── Pricing service URL ──────────────────────────────────────────────────────
+# Overridden by PRICING_SERVICE_URL env var in Docker / ECS.
+pricing:
+  service:
+    url: ${PRICING_SERVICE_URL:http://localhost:8081}
+
+# ─── Actuator ────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.demo.order: DEBUG
+  file:
+    name: /var/log/order-service/app.log

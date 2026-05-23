@@ -33,6 +33,17 @@ def main():
             "DATABASE_URL", "mysql+pymysql://root:root@localhost:3306/rca_db"
         ),
     )
+    parser.add_argument(
+        "--scenario",
+        choices=["python", "cross-service", "all"],
+        default="python",
+        help=(
+            "Which error scenarios to seed. "
+            "'python' = original 3 Python demo scenarios (default). "
+            "'cross-service' = Java pricing+order-service cross-service NPE + off-by-one. "
+            "'all' = seed everything."
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -70,6 +81,19 @@ def main():
         # repository name under GITHUB_ORG in your GitHub account.
         ("banking-app", args.org, "banking-app", "main"),
     ]
+
+    # Java cross-service repos are seeded for all scenarios (they're always useful)
+    java_services = [
+        # pricing-service and order-service Java repos
+        # github_repo names match what push_to_github.sh creates
+        ("pricing-service", args.org, "pricing-service", "main"),
+        # order-service-java maps the Java Spring Boot order-service
+        # (the Python demo-repos/order-service maps to "order-service" above)
+        ("order-service-java", args.org, "order-service-java", "main"),
+    ]
+
+    if args.scenario in ("cross-service", "all"):
+        services = services + java_services
     for svc, org, repo, branch in services:
         cur.execute(
             """INSERT INTO service_repo_map (service_name, github_org, github_repo, default_branch)
@@ -85,7 +109,8 @@ def main():
     # ── 2. error_logs ─────────────────────────────────────────────────────
     print("\n── Seeding error_logs ──")
 
-    error_logs = [
+    # Python demo scenarios
+    python_error_logs = [
         # Case 1: payment-service AttributeError
         {
             "id": str(uuid.uuid4()),
@@ -162,6 +187,95 @@ def main():
             "metadata": {"user_id": "usr_4421", "email_type": "welcome"},
         },
     ]
+
+    # Java cross-service scenarios (pricing-service + order-service)
+    cross_service_error_logs = [
+        # Scenario A: order-service NPE from stale discount field (cross-service)
+        {
+            "id": str(uuid.uuid4()),
+            "service_name": "order-service-java",
+            "environment": "production",
+            "error_type": "NullPointerException",
+            "error_message": (
+                'Cannot invoke "java.lang.Double.doubleValue()" because the return value '
+                'of "com.demo.order.dto.PricingResponseDto.getDiscount()" is null'
+            ),
+            "stack_trace": [
+                {
+                    "file": "com/demo/order/service/OrderService.java",
+                    "line": 139,
+                    "function": "calculateTotal",
+                    "text": "double discountedUnit = unitPrice * (1.0 - discount.doubleValue());",
+                },
+                {
+                    "file": "com/demo/order/service/OrderService.java",
+                    "line": 58,
+                    "function": "createOrder",
+                    "text": "double totalPrice = calculateTotal(pricing.getBasePrice(), pricing.getDiscount(), resolvedQty);",
+                },
+                {
+                    "file": "com/demo/order/controller/OrderController.java",
+                    "line": 40,
+                    "function": "createOrder",
+                    "text": "OrderDto.Response response = orderService.createOrder(request);",
+                },
+            ],
+            "severity": "critical",
+            "metadata": {
+                "customerId": "CHAOS-CUSTOMER",
+                "sku": "SKU-001",
+                "quantity": 2,
+                "customerTier": "premium",
+                "upstream_service": "pricing-service",
+                "upstream_version": "2.1.0",
+            },
+        },
+        # Scenario B: order-service off-by-one in resolveQuantity (single-service)
+        {
+            "id": str(uuid.uuid4()),
+            "service_name": "order-service-java",
+            "environment": "production",
+            "error_type": "IllegalArgumentException",
+            "error_message": "Order quantity 0 is invalid",
+            "stack_trace": [
+                {
+                    "file": "com/demo/order/service/OrderService.java",
+                    "line": 111,
+                    "function": "resolveQuantity",
+                    "text": 'throw new IllegalArgumentException("Order quantity " + resolved + " is invalid");',
+                },
+                {
+                    "file": "com/demo/order/service/OrderService.java",
+                    "line": 52,
+                    "function": "createOrder",
+                    "text": "int resolvedQty = resolveQuantity(req.getQuantity());",
+                },
+                {
+                    "file": "com/demo/order/controller/OrderController.java",
+                    "line": 40,
+                    "function": "createOrder",
+                    "text": "OrderDto.Response response = orderService.createOrder(request);",
+                },
+            ],
+            "severity": "high",
+            "metadata": {
+                "customerId": "CHAOS-CUSTOMER",
+                "sku": "SKU-002",
+                "quantity": 1,
+                "customerTier": "standard",
+                "commit": "d3adb33f",
+                "author": "Carlos Rivera",
+            },
+        },
+    ]
+
+    # Decide which error logs to seed
+    if args.scenario == "python":
+        error_logs = python_error_logs
+    elif args.scenario == "cross-service":
+        error_logs = cross_service_error_logs
+    else:  # all
+        error_logs = python_error_logs + cross_service_error_logs
 
     log_ids = []
     for log in error_logs:

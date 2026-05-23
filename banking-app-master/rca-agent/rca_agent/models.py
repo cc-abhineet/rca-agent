@@ -110,10 +110,12 @@ class AnalysisMetadata(BaseModel):
     cache_hits: list[str] = []
     deployment_record_used: bool = False
     repo_discovered_via: str = "service_repo_map"  # or "sub_agent" or "cicd"
+    # v1.1 — cross-service investigation tracking
+    repos_investigated: list[str] = []
 
 
 class RCAReport(BaseModel):
-    schema_version: str = "1.0"
+    schema_version: str = "1.1"
     rca_id: str
     error_log_id: str
     service_name: str
@@ -127,3 +129,6 @@ class RCAReport(BaseModel):
     suggested_solutions: list[SuggestedSolution]
     prevention_recommendations: list[str] = []
     analysis_metadata: AnalysisMetadata
+    # v1.1 — cross-service fields (optional)
+    service_boundary_crossed: bool = False
+    upstream_service: str | None = None
