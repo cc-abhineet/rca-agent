@@ -128,7 +128,7 @@ services:
       dockerfile: error-ingestion-agent/Dockerfile
     env_file: env        # DD_API_KEY, DD_APP_KEY, DD_SITE, GEMINI_API_KEY
     environment:
-      DATABASE_URL: "mysql+pymysql://rca:Rca%%4012345@localhost:3306/rca_db"
+      DATABASE_URL: mysql+pymysql://rca:Rca%4012345@host.docker.internal:3306/rca_db
       MODE: "db"                              # tail log file and insert errors into MySQL
       LOG_FILE_PATH: "/var/log/banking-app/app.log"
       SERVICE_NAME: "banking-app"
@@ -150,7 +150,7 @@ services:
       - "8000:8000"
     env_file: env        # ANTHROPIC_API_KEY, GITHUB_PAT
     environment:
-      DATABASE_URL: "mysql+pymysql://rca:Rca%%4012345@localhost:3306/rca_db"
+      DATABASE_URL: mysql+pymysql://rca:Rca%4012345@host.docker.internal:3306/rca_db
       OBSERVABILITY_ADAPTER: "local"
       CICD_ADAPTER: "mock"
       GITHUB_ORG: "oscorpAI"
