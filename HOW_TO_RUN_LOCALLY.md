@@ -1,6 +1,125 @@
 # How to Run Locally
 
-## Prerequisites
+---
+
+## Quick Start — Docker Compose (recommended)
+
+Bring up all three Java services, the Datadog agent, and three log-viewer UIs
+in one command:
+
+```bash
+# 1. Copy and fill in secrets (DD_API_KEY, ANTHROPIC_API_KEY, GITHUB_PAT)
+cp env.example env
+#    edit env
+
+# 2. Build and start everything
+docker compose up --build
+```
+
+| Service | URL | What it is |
+|---------|-----|------------|
+| banking-app | http://localhost:8080 | Spring Boot banking service |
+| pricing-service | http://localhost:8081 | Pricing engine (v2.1.0, `discountRate` rename) |
+| order-service | http://localhost:8082 | Order service (Bug A + Bug B) |
+| ingestion-agent | — | Tails banking-app logs → inserts errors into MySQL |
+| rca-agent | http://localhost:8000 | FastAPI + Claude RCA engine (`/demo` for UI) |
+| ui-banking | http://localhost:5000 | Log viewer → banking-app |
+| ui-order | http://localhost:5001 | Log viewer → order-service (single-service RCA) |
+| ui-pricing-order | http://localhost:5002 | Log viewer → pricing + order (cross-service RCA demo) |
+
+### Before you run — create the MySQL database (one-time)
+
+MySQL runs on your **host** (not in Docker). Create the database and user once before the first `docker compose up`:
+
+```bash
+sudo mysql
+```
+```sql
+CREATE DATABASE IF NOT EXISTS rca_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'rca'@'localhost' IDENTIFIED BY 'Rca@12345';
+GRANT ALL PRIVILEGES ON rca_db.* TO 'rca'@'localhost';
+-- Also grant from Docker containers (they connect via host.docker.internal)
+CREATE USER IF NOT EXISTS 'rca'@'%' IDENTIFIED BY 'Rca@12345';
+GRANT ALL PRIVILEGES ON rca_db.* TO 'rca'@'%';
+FLUSH PRIVILEGES;
+exit
+```
+
+The rca-agent container runs `alembic upgrade head` automatically on startup, creating all tables.
+
+### How RCA runs
+
+`docker compose up --build` starts everything — Java services, Datadog agent, ingestion-agent, rca-agent (port 8000), and the three log-viewer UIs. After an error is generated, the ingestion-agent detects it in the banking-app log, inserts a row into `error_logs`, and the rca-agent's poll loop picks it up automatically (`RCA_POLL_ENABLED=true`).
+
+To trigger RCA manually or view a report:
+```bash
+# Browser UI (easiest — shows pending errors in a dropdown)
+open http://localhost:8000/demo
+
+# Or curl — get UUID first:
+mysql -u rca -p'Rca@12345' rca_db -e "SELECT id, service_name, error_type FROM error_logs WHERE rca_status='pending';"
+
+curl -s -X POST http://localhost:8000/rca/run \
+  -H "Content-Type: application/json" \
+  -d '{"error_log_id": "PASTE-UUID-HERE"}' | python3 -m json.tool
+
+# HTML report:
+open http://localhost:8000/rca/PASTE-UUID-HERE/report
+```
+
+---
+
+### Trigger chaos to generate errors
+
+```bash
+# Trigger Bug A — NPE from stale discount field (pricing-service renamed discount→discountRate)
+# Actual path: POST /api/v1/orders  (controller: @RequestMapping("/api/v1/orders"))
+curl -s -X POST http://localhost:8082/api/v1/orders \
+  -H "Content-Type: application/json" \
+  -d '{"customerId":"demo-1","sku":"SKU-001","quantity":2,"customerTier":"premium"}' | python3 -m json.tool
+
+# Trigger Bug A via chaos endpoint (no request body needed)
+curl -s -X POST http://localhost:8082/chaos/cross-service-npe | python3 -m json.tool
+
+# Trigger Bug B — off-by-one in resolveQuantity (quantity=1 → 0 → IllegalArgumentException)
+curl -s -X POST http://localhost:8082/chaos/quantity-off-by-one | python3 -m json.tool
+
+# Banking-app chaos
+curl -s -X POST http://localhost:8080/chaos/null-pointer | python3 -m json.tool
+```
+
+### Register services in the rca-agent database
+
+After running `alembic upgrade head` (see Step 2 below), register pricing-service
+and order-service so the rca-agent can map them to their GitHub repos:
+
+```bash
+python add_service_map.py
+# → registers banking-app, pricing-service, order-service in service_repo_map
+```
+
+To register a custom service:
+
+```bash
+python add_service_map.py \
+  --service my-service \
+  --org my-github-org \
+  --repo my-service-repo \
+  --language Java
+```
+
+### Teardown
+
+```bash
+docker compose down          # stop containers, keep volumes
+docker compose down -v       # stop containers AND delete log volumes
+```
+
+---
+
+## Manual Setup (without Docker)
+
+### Prerequisites
 
 | Tool | Version | Install |
 |---|---|---|
@@ -15,7 +134,7 @@ You need three API keys:
 
 ---
 
-## Step 0 — Install and Start MySQL (Ubuntu / WSL)
+### Step 0 — Install and Start MySQL (Ubuntu / WSL)
 
 If you don't already have a running MySQL server, install one:
 
@@ -54,7 +173,7 @@ mysql -u root -p -e "SELECT VERSION();"
 
 ---
 
-## Step 1 — Create the MySQL Database
+### Step 1 — Create the MySQL Database
 
 Open MySQL shell (or MySQL Workbench) and run:
 
@@ -72,7 +191,7 @@ CREATE DATABASE rca_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ---
 
-## Step 2 — Set Up the RCA Agent
+### Step 2 — Set Up the RCA Agent
 
 ```bash
 cd banking-app-master/rca-agent
@@ -116,7 +235,7 @@ curl http://localhost:8000/health
 
 ---
 
-## Step 3 — Seed Demo Data
+### Step 3 — Seed Demo Data
 
 ```bash
 # From banking-app-master/demo-repos/
@@ -131,7 +250,7 @@ This will:
 
 ---
 
-## Step 4 — Trigger an RCA
+### Step 4 — Trigger an RCA
 
 **Option A — Browser (recommended):**
 Open http://localhost:8000/demo
@@ -161,7 +280,7 @@ http://localhost:8000/rca/PASTE-UUID-HERE/report
 
 ---
 
-## Step 5 (Optional) — Run the Error Ingestion Agent
+### Step 5 (Optional) — Run the Error Ingestion Agent
 
 This is only needed if you want to watch a real log file for errors.
 
@@ -189,7 +308,7 @@ The agent will detect it, classify it with Gemini, and insert it into `error_inc
 
 ---
 
-## Step 6 (Optional) — Run the Eval Suite
+### Step 6 (Optional) — Run the Eval Suite
 
 ```bash
 cd banking-app-master/rca-agent
@@ -203,7 +322,7 @@ pytest evals/ -v -k "payment-service"
 
 ---
 
-## Troubleshooting
+### Troubleshooting
 
 ### `pymysql.err.OperationalError: Can't connect to MySQL server`
 - MySQL isn't running. Start it: `net start mysql` (Windows) or `brew services start mysql` (Mac)
@@ -256,29 +375,46 @@ pytest evals/ -v -k "payment-service"
 
 ---
 
-## Directory Quick Reference
+### Directory Quick Reference
 
 ```
-banking-app-master/
-├── docker-compose.yml          ← Full stack (MySQL + all services)
-├── .env.example                ← Copy to .env, fill API keys
+rca-agent/                       ← repo root
+├── docker-compose.yml           ← One-command local stack (all services + UIs)
+├── env.example                  ← Copy to `env`, fill DD_API_KEY + secrets
+├── add_service_map.py           ← Seeds service_repo_map in MySQL
 │
-├── rca-agent/                  ← Main AI service (FastAPI + Claude)
-│   ├── .env.example            ← RCA-agent-specific env vars
-│   ├── alembic/                ← Database migrations (run: alembic upgrade head)
-│   ├── app/main.py             ← FastAPI routes (port 8000)
-│   └── rca_agent/              ← Core agent logic
-│       ├── agent.py            ← ReAct loop + tool dispatch
-│       ├── config.py           ← Settings (reads .env)
-│       ├── db.py               ← PyMySQL sync wrapper
-│       ├── cache.py            ← GitHub context cache
-│       ├── github_tools.py     ← GitHub API wrappers
-│       └── repo_resolver.py    ← Service → GitHub repo mapping
+├── datadog/conf.d/              ← Datadog log collection configs
+│   ├── banking-app.d/conf.yaml
+│   ├── pricing-service.d/conf.yaml
+│   └── order-service.d/conf.yaml
 │
-├── error-ingestion-agent/      ← Log watcher / Datadog webhook (aiomysql + Gemini)
-│   ├── main.py                 ← Entry point (db or datadog mode)
-│   └── agents/log_monitor/     ← LangGraph pipeline (parse→analyze→store)
+├── ui/                          ← Minimal Flask log-viewer (3 instances in compose)
+│   ├── app.py
+│   ├── Dockerfile
+│   └── requirements.txt
 │
-└── demo-repos/
-    └── demo_seed_data.py       ← Seeds MySQL with error_logs for demo
+└── banking-app-master/
+    ├── rca-agent/               ← Main AI service (FastAPI + Claude)
+    │   ├── .env.example         ← RCA-agent-specific env vars
+    │   ├── alembic/             ← Database migrations (run: alembic upgrade head)
+    │   ├── app/main.py          ← FastAPI routes (port 8000)
+    │   └── rca_agent/           ← Core agent logic
+    │       ├── agent.py         ← ReAct loop + 13 tools (multi-service aware)
+    │       ├── config.py        ← Settings (reads .env)
+    │       ├── db.py            ← PyMySQL sync wrapper
+    │       ├── dependency_memory.py  ← Cross-service dependency store (JSON)
+    │       ├── github_tools.py  ← GitHub API wrappers + global search
+    │       └── repo_resolver.py ← Service → GitHub repo mapping
+    │
+    ├── pricing-service/         ← Spring Boot 3.2.3, port 8081
+    │   └── src/…                ← v2.1.0 — renamed discount→discountRate
+    │
+    ├── order-service/           ← Spring Boot 3.2.3, port 8082
+    │   └── src/…                ← Bug A (NPE) + Bug B (off-by-one)
+    │
+    ├── error-ingestion-agent/   ← Log watcher / Datadog webhook
+    │   └── main.py
+    │
+    └── demo-repos/
+        └── demo_seed_data.py    ← Seeds MySQL with error_logs for demo
 ```

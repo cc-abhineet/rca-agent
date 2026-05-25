@@ -96,3 +96,55 @@ def get_commits_since(org: str, repo: str, branch: str, since: str) -> dict:
     except GithubException as e:
         logger.warning("get_commits_since failed: %s/%s — %s", repo, branch, e)
         return {"error": str(e), "commits": []}
+
+
+def search_github_global(
+    query: str,
+    org: str | None = None,
+    max_results: int = 15,
+) -> dict:
+    """Search code across all repos in an org (or GitHub-wide if org is None).
+
+    Useful for cross-service investigation: find which other repos reference a
+    class, field name, or HTTP endpoint that may be the source of a breakage.
+
+    Args:
+        query:       Code search term (e.g. 'PricingResponseDto discount').
+        org:         GitHub organisation to scope the search (recommended).
+                     If None, searches across all of GitHub.
+        max_results: Maximum number of results to return (default: 15).
+
+    Returns:
+        {
+            "results": [{"repo", "path", "html_url", "score"}],
+            "count": int,
+            "query_used": str,
+        }
+    """
+    try:
+        qualifier = f" org:{org}" if org else ""
+        full_query = f"{query}{qualifier}"
+        logger.info("search_github_global: %s", full_query)
+        raw = _client().search_code(full_query)
+        results = []
+        for item in list(raw)[:max_results]:
+            entry: dict = {
+                "repo": item.repository.full_name,
+                "path": item.path,
+                "html_url": item.html_url,
+                "score": getattr(item, "score", None),
+            }
+            # Include text_matches if available (requires Accept header — best effort)
+            try:
+                if item.text_matches:
+                    entry["text_matches"] = [
+                        {"fragment": m.get("fragment", ""), "object_type": m.get("object_type", "")}
+                        for m in item.text_matches
+                    ]
+            except Exception:
+                pass
+            results.append(entry)
+        return {"results": results, "count": len(results), "query_used": full_query}
+    except GithubException as e:
+        logger.warning("search_github_global failed: %s — %s", query, e)
+        return {"error": str(e), "results": [], "count": 0, "query_used": query}

@@ -16,12 +16,24 @@ set -euo pipefail
 : "${GITHUB_PAT:?Set GITHUB_PAT env var}"
 
 DEMO_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPOS=("payment-service" "order-service" "notification-service")
+
+# Python demo repos (inside demo-repos/)
+DEMO_REPOS=("payment-service" "order-service" "notification-service")
+
+# Java Spring Boot repos (siblings of demo-repos/ in banking-app-master/)
+JAVA_REPOS=("pricing-service" "order-service")
+# Note: order-service appears in both lists (Python mock + Java real).
+# The Java one is pushed as "pricing-service" and "order-service-java" to avoid collision,
+# unless you intentionally want the Java repo to replace the Python one.
+# Adjust JAVA_REPO_NAMES if needed:
+JAVA_REPO_NAMES=("pricing-service" "order-service-java")
+JAVA_REPO_DIRS=("../pricing-service" "../order-service")
 
 create_and_push() {
     local repo="$1"
+    local dir="$2"
     echo ""
-    echo "=== $repo ==="
+    echo "=== $repo (dir: $dir) ==="
 
     # Create repo via GitHub API (ignore error if already exists)
     HTTP_STATUS=$(curl -s -o /tmp/gh_create_out.json -w "%{http_code}" \
@@ -42,20 +54,31 @@ create_and_push() {
     fi
 
     # Push
-    cd "$DEMO_DIR/$repo"
+    cd "$dir"
     git remote remove origin 2>/dev/null || true
     git remote add origin "https://$GITHUB_PAT@github.com/$GITHUB_ORG/$repo.git"
     git push -u origin main --force
     echo "  Pushed: https://github.com/$GITHUB_ORG/$repo"
+    cd - >/dev/null
 }
 
-for repo in "${REPOS[@]}"; do
-    create_and_push "$repo"
+echo ""
+echo "── Pushing Python demo repos ──────────────────────────"
+for repo in "${DEMO_REPOS[@]}"; do
+    create_and_push "$repo" "$DEMO_DIR/$repo"
+done
+
+echo ""
+echo "── Pushing Java Spring Boot repos ─────────────────────"
+for i in "${!JAVA_REPO_NAMES[@]}"; do
+    create_and_push "${JAVA_REPO_NAMES[$i]}" "$DEMO_DIR/${JAVA_REPO_DIRS[$i]}"
 done
 
 echo ""
 echo "========================================================"
 echo "All repos pushed to github.com/$GITHUB_ORG"
 echo ""
-echo "Now run: python demo_seed_data.py --org $GITHUB_ORG"
+echo "Now run:"
+echo "  python demo_seed_data.py --org $GITHUB_ORG"
+echo "  python demo_seed_data.py --org $GITHUB_ORG --scenario cross-service"
 echo "========================================================"

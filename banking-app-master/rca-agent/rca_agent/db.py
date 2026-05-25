@@ -52,6 +52,25 @@ def execute_one(sql: str, params=None) -> dict | None:
     return rows[0] if rows else None
 
 
+def execute_update(sql: str, params=None) -> int:
+    """
+    Execute a write statement (INSERT / UPDATE / DELETE) and return the number
+    of affected rows.
+
+    Used by the RCA poll loop to atomically claim a pending error log:
+        claimed = execute_update(
+            "UPDATE error_logs SET rca_status='in_progress' WHERE id=%s AND rca_status='pending'",
+            (error_log_id,),
+        )
+    A return value of 1 means this worker successfully claimed the row;
+    0 means another worker got there first (safe to skip).
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.rowcount
+
+
 def json_loads(v):
     """Safely parse a JSON value that may already be a dict/list (from ORM) or a string."""
     if v is None:

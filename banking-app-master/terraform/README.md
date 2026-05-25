@@ -1,8 +1,28 @@
-# Terraform — Datadog Monitor & RCA Agent Webhook
+# Terraform
 
-This Terraform configuration creates:
+This directory contains two separate Terraform configurations:
+
+## terraform/aws/ — Full AWS Infrastructure
+
+Deploys the complete RCA platform to AWS ECS on **three EC2 container instances — one per service**. Each service is pinned to its dedicated host via ECS placement constraints (`attribute:module == ...`), and each host is right-sized to its task's memory needs. See `AWS_DEPLOYMENT.md` for the full guide.
+
+Creates: VPC, RDS MySQL, ECS cluster with three EC2 hosts (`monitored-app`, `ingestion-agent`, `rca-agent`), four ECR repos, per-host security groups, SSM Parameter Store secrets, IAM roles.
+
+The **monitored-app slot is fully parameterized** via the `monitored_app` object variable — swap banking-app for any other service by editing one block in `terraform.tfvars` (image, port, sizing, env vars, optional Datadog sidecar). The ingestion-agent and rca-agent hosts are untouched by an app swap.
+
+```bash
+cd terraform/aws
+cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform apply -var-file=terraform.tfvars
+```
+
+## terraform/ (root) — Datadog Monitor & Webhook (legacy / optional)
+
+This configuration creates:
 1. A **Datadog APM error rate monitor** for the banking-app service
 2. A **Datadog webhook** that fires to the rca-agent's public endpoint when the monitor alerts
+
+> **Note:** The primary integration mode is now `MODE=datadog_poll` (ingestion agent polls Datadog Logs API directly). The webhook and monitor in this directory are kept as a reference and fallback — they are not required for the polling architecture.
 
 ## Prerequisites
 

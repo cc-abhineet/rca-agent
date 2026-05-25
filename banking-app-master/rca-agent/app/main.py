@@ -1,7 +1,9 @@
 import json
+import logging
 import os
 import queue
 import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,21 +12,122 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from rca_agent.config import settings
-from rca_agent.db import execute, execute_one, json_loads
+from rca_agent.db import execute, execute_one, execute_update, json_loads
 from rca_agent.adapters.observability.local_db import LocalDBAdapter
 from rca_agent.adapters.cicd.mock_adapter import MockCICDAdapter
 from rca_agent.agent import RCAAgent
 from rca_agent.report_renderer import render_rca_html
 
-app = FastAPI(
-    title="rca-agent",
-    description="AI-powered Root Cause Analysis API",
-    version="0.1.0",
-)
+logger = logging.getLogger("rca-agent")
 
 obs_adapter = LocalDBAdapter()
 cicd_adapter = MockCICDAdapter()
 agent = RCAAgent(obs_adapter=obs_adapter, cicd_adapter=cicd_adapter)
+
+# ── DB poll loop ──────────────────────────────────────────────────────────────
+
+_stop_poll = threading.Event()
+
+
+def _run_rca_safe(error_log_id: str) -> None:
+    """
+    Run the full RCA pipeline for one error log row, updating rca_status
+    throughout.  Swallows all exceptions so a single bad row never kills the
+    poll thread.
+    """
+    try:
+        logger.info("Poll loop: starting RCA for error_log_id=%s", error_log_id)
+        report = agent.run(error_log_id)
+        execute(
+            """UPDATE error_logs
+               SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
+               WHERE id=%s""",
+            (json.dumps(report.model_dump()), error_log_id),
+        )
+        logger.info("Poll loop: RCA completed for error_log_id=%s", error_log_id)
+    except Exception as exc:
+        logger.exception("Poll loop: RCA failed for error_log_id=%s: %s", error_log_id, exc)
+        execute(
+            "UPDATE error_logs SET rca_status='failed', rca_error=%s WHERE id=%s",
+            (str(exc), error_log_id),
+        )
+
+
+def _poll_loop() -> None:
+    """
+    Background thread: scan error_logs for pending rows, atomically claim one,
+    and run RCA on it.
+
+    Claim is atomic: UPDATE ... WHERE rca_status='pending' — if rowcount == 1
+    this process owns the row; rowcount == 0 means another worker (or a
+    concurrent HTTP request) got there first.  This keeps the poll loop safe
+    even when multiple replicas run (future horizontal scale).
+
+    The loop sleeps rca_poll_interval_seconds only when no pending row is found.
+    When a row IS found it processes it and immediately checks for the next one,
+    draining the backlog without an artificial delay.
+    """
+    logger.info(
+        "RCA poll loop started — interval=%ds", settings.rca_poll_interval_seconds
+    )
+    while not _stop_poll.is_set():
+        row = execute_one(
+            """SELECT id FROM error_logs
+               WHERE rca_status = 'pending'
+               ORDER BY occurred_at ASC
+               LIMIT 1"""
+        )
+        if not row:
+            _stop_poll.wait(timeout=settings.rca_poll_interval_seconds)
+            continue
+
+        error_log_id = str(row["id"])
+        claimed = execute_update(
+            """UPDATE error_logs
+               SET rca_status='in_progress', rca_started_at=NOW()
+               WHERE id=%s AND rca_status='pending'""",
+            (error_log_id,),
+        )
+        if claimed == 1:
+            _run_rca_safe(error_log_id)
+        # else: another worker claimed it — loop immediately to pick up next row
+
+    logger.info("RCA poll loop stopped")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FastAPI lifespan: start the DB poll thread on startup when
+    RCA_POLL_ENABLED=true, stop it cleanly on shutdown.
+
+    The poll thread is a daemon so it won't block process exit if something
+    goes wrong during shutdown.
+    """
+    poll_thread: threading.Thread | None = None
+    if settings.rca_poll_enabled:
+        logger.info("RCA_POLL_ENABLED=true — starting background poll thread")
+        poll_thread = threading.Thread(target=_poll_loop, daemon=True, name="rca-poll")
+        poll_thread.start()
+    else:
+        logger.info(
+            "RCA_POLL_ENABLED=false — poll loop disabled; use POST /rca/run to trigger manually"
+        )
+
+    yield  # ── application running ──
+
+    if poll_thread is not None:
+        logger.info("Shutdown: stopping RCA poll thread…")
+        _stop_poll.set()
+        poll_thread.join(timeout=10)
+
+
+app = FastAPI(
+    title="rca-agent",
+    description="AI-powered Root Cause Analysis API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 # Path to the seeded IDs file (written by demo_seed_data.py)
 _SEEDED_IDS_PATH = Path(__file__).parent.parent.parent / "demo-repos" / "seeded_ids.json"

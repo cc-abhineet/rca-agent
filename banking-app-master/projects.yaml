@@ -24,7 +24,49 @@ projects:
     # log_path is only used when observability_mode is 'db'
     log_path: null
 
-  # Example: add a second service in db (file-watcher) mode
+  # ── Cross-service demo: pricing-service + order-service ────────────────────
+  # pricing-service v2.1.0 renamed discountRate (was discount).
+  # order-service still reads discount → NullPointerException (Bug A).
+  # order-service also has an off-by-one in resolveQuantity (Bug B).
+  #
+  # Start with: docker compose --profile pricing up --build
+  # Then seed:  python demo-repos/demo_seed_data.py --scenario cross-service
+
+  - id: pricing-service
+    name: "Pricing Service"
+    description: "Spring Boot service that calculates SKU prices and customer-tier discounts. v2.1.0 renamed 'discount' field to 'discountRate' — order-service has not been updated."
+    github_org: oscorpAI
+    github_repo: pricing-service
+    environment: production
+    observability_mode: datadog
+
+    datadog:
+      service_name: pricing-service
+      env: production
+      monitor_ids: []
+
+    chaos_endpoint: http://localhost:8081/chaos
+
+    log_path: null
+
+  - id: order-service
+    name: "Order Service"
+    description: "Spring Boot service that creates orders by calling pricing-service. Contains Bug A (NPE from stale discount field) and Bug B (off-by-one in resolveQuantity)."
+    github_org: oscorpAI
+    github_repo: order-service
+    environment: production
+    observability_mode: datadog
+
+    datadog:
+      service_name: order-service
+      env: production
+      monitor_ids: []
+
+    chaos_endpoint: http://localhost:8082/chaos
+
+    log_path: null
+
+  # Example: add a service in db (file-watcher) mode
   # - id: payments-service
   #   name: "Payments Service"
   #   description: "Internal payments processing microservice"

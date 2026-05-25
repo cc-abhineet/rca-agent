@@ -1,0 +1,10 @@
+logs:
+  - type: file
+    path: /var/log/order-service/app.log
+    service: order-service
+    source: java
+    sourcecategory: sourcecode
+    log_processing_rules:
+      - type: multi_line
+        name: java_multiline_exception
+        pattern: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
