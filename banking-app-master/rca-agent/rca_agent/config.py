@@ -15,5 +15,18 @@ class Settings(BaseSettings):
     observability_adapter: str = "local"   # "local" | "datadog"
     cicd_adapter: str = "mock"             # "mock" | "real"
 
+    # ── DB poll mode ──────────────────────────────────────────────────────────
+    # When rca_poll_enabled=true the agent starts a background thread that scans
+    # error_logs for pending rows and runs RCA automatically — no HTTP trigger
+    # needed. This is the primary mode for the banking-app AWS deployment where
+    # the ingestion agent writes directly to RDS and the RCA agent picks it up.
+    #
+    # Set via env var: RCA_POLL_ENABLED=true
+    rca_poll_enabled: bool = False
+    # Seconds between scans when no pending row was found.  When a row IS found
+    # the loop claims it immediately and starts another scan right after, so
+    # this only controls the idle sleep.
+    rca_poll_interval_seconds: int = 30
+
 
 settings = Settings()

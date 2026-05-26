@@ -1,11 +1,24 @@
 """
-Error Ingestion Agent — Entry Point (File Watcher / DB Mode)
+Error Ingestion Agent — Entry Point
 
-Watches a log file for new lines containing errors and feeds them
-through the LangGraph incident processing pipeline.
+Supports three operating modes, selected via the MODE environment variable:
 
-Run:
-    MODE=db LOG_FILE_PATH=/var/log/banking-app/app.log python main.py
+  MODE=db (default)
+      Tails LOG_FILE_PATH for new lines and feeds errors through the
+      LangGraph incident processing pipeline (file-watcher mode).
+      Run: MODE=db LOG_FILE_PATH=/var/log/banking-app/app.log python main.py
+
+  MODE=datadog
+      Starts a FastAPI server that receives Datadog monitor alert webhooks
+      on WEBHOOK_PORT (default 8001).
+      Run: MODE=datadog python main.py
+
+  MODE=datadog_poll
+      Polls the Datadog Logs Search API at POLL_INTERVAL_SECONDS (default 30)
+      for new ERROR/EXCEPTION log events from services declared in projects.yaml.
+      Service list is driven by projects.yaml (observability_mode: datadog).
+      Credentials: DD_API_KEY, DD_APP_KEY (required); DD_SITE (default datadoghq.com).
+      Run: MODE=datadog_poll DD_API_KEY=... DD_APP_KEY=... python main.py
 """
 import asyncio
 import logging
@@ -139,8 +152,15 @@ def main():
         from datadog_webhook import app
         logger.info("Starting Datadog webhook mode on port %d", settings.webhook_port)
         uvicorn.run(app, host="0.0.0.0", port=settings.webhook_port)
+    elif settings.mode == "datadog_poll":
+        from datadog_poller import run_datadog_poller
+        logger.info("Starting Datadog poll mode (site=%s, interval=%ds)", settings.dd_site, settings.poll_interval_seconds)
+        asyncio.run(run_datadog_poller())
     else:
-        logger.error("Unknown MODE: %s -- must be 'db' or 'datadog'", settings.mode)
+        logger.error(
+            "Unknown MODE: %s -- must be 'db', 'datadog', or 'datadog_poll'",
+            settings.mode,
+        )
         sys.exit(1)
 
 

@@ -952,6 +952,17 @@ demo-ui           3000   banking-app,  ./demo-ui (nginx static)
 - `banking-app`: `curl /actuator/health` every 10s, 30s start period
 - `rca-agent`: `curl /health` every 10s
 
+### 14.1 AWS topology — one EC2 per service
+
+The Docker Compose stack above is the **local** topology: a single host, shared `banking_logs` volume, services talking over the compose bridge network. The **AWS** topology (Terraform in `banking-app-master/terraform/aws/`) deliberately differs:
+
+- **Three EC2 container instances**, one per service: `host_monitored_app`, `host_ingestion_agent`, `host_rca_agent`. Each is right-sized to its task's memory needs (defaults: t3.small / t3.micro / t3.small).
+- Each instance advertises a `module` attribute via `ECS_INSTANCE_ATTRIBUTES` in user_data; each ECS service uses a `memberOf(attribute:module == ...)` placement constraint to pin its task to the matching host. One ECS cluster, three pinned tasks.
+- **No shared log volume.** On AWS the ingestion path is `MODE=datadog_poll` — the dd-agent sidecar on the monitored-app host ships logs to Datadog, and the ingestion-agent on its own host pulls them back via the Datadog Logs API. There is no equivalent of compose's `banking_logs:ro` mount across EC2 instances; switching back to `MODE=db` (file tailing) is not supported on the per-host AWS topology.
+- The **monitored-app slot is fully parameterized** via `var.monitored_app` (object: `service_name`, `image_repo_name`, `image_tag`, `port`, `task_cpu`, `task_memory`, `instance_type`, `needs_dd_sidecar`, `extra_env`). Swapping banking-app for a different application is a tfvars edit plus a `terraform apply`; the ingestion-agent and rca-agent hosts are untouched.
+
+See `AWS_DEPLOYMENT.md` for the full deployment guide and the "Swapping the Monitored Application" section.
+
 ---
 
 ## 15. Configuration & Environment Variables
