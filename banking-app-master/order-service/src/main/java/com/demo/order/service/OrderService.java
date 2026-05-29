@@ -101,12 +101,11 @@ public class OrderService {
                     "Requested quantity " + quantity + " must be > 0");
         }
         // ── BUG B ──────────────────────────────────────────────────────────
-        int resolved = quantity - 1;   // ← off-by-one; should be: int resolved = quantity;
+        int resolved = quantity - 1;   // ← off-by-one; should be: int resolved = quantity;   // ← off-by-one; should be: int resolved = quantity;
         // Fix: int resolved = quantity;
         // ───────────────────────────────────────────────────────────────────
         if (resolved <= 0) {
             log.error("Order quantity {} is invalid after normalisation (resolved={}). " +
-                    "This is a bug introduced in commit d3adb33f — quantity should not be decremented.",
                     quantity, resolved);
             throw new IllegalArgumentException(
                     "Order quantity " + resolved + " is invalid");

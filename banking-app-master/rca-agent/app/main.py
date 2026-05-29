@@ -3,10 +3,12 @@ import logging
 import os
 import queue
 import threading
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
@@ -17,6 +19,16 @@ from rca_agent.adapters.observability.local_db import LocalDBAdapter
 from rca_agent.adapters.cicd.mock_adapter import MockCICDAdapter
 from rca_agent.agent import RCAAgent
 from rca_agent.report_renderer import render_rca_html
+from app.demo_scenarios import SCENARIO_KEY, DEMO_SERVICE_REPO_MAP
+from rca_agent.dependency_memory import write_dependency_memory
+from rca_agent.fix_creator import create_fix_pr, FixCreationError
+
+ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://order-service:8082")
+
+CHAOS_ENDPOINTS = {
+    "single_service": "/chaos/quantity-off-by-one",
+    "cross_service": "/chaos/cross-service-npe",
+}
 
 logger = logging.getLogger("rca-agent")
 
@@ -300,3 +312,168 @@ def demo_scenarios():
         label = f"{svc} — {err} ({ts})"
         scenarios[label] = str(row["id"])
     return {"scenarios": scenarios}
+
+
+@app.post("/demo/seed")
+def demo_seed():
+    """
+    Idempotent: upsert service_repo_map entries and insert pre-crafted error
+    logs for both demo scenarios.  Safe to call on every page load.
+    """
+    for svc, org, repo, branch, lang in DEMO_SERVICE_REPO_MAP:
+        execute(
+            """INSERT INTO service_repo_map
+                   (service_name, github_org, github_repo, default_branch, language)
+               VALUES (%s, %s, %s, %s, %s)
+               ON DUPLICATE KEY UPDATE
+                   github_org=VALUES(github_org),
+                   github_repo=VALUES(github_repo),
+                   default_branch=VALUES(default_branch),
+                   language=VALUES(language)""",
+            (svc, org, repo, branch, lang),
+        )
+
+    # Pre-seed cross-service dependency so Claude skips the discovery phase
+    write_dependency_memory(
+        downstream_service="order-service",
+        upstream_service="pricing-service",
+        upstream_repo="pricing-service",
+        evidence="OrderService calls pricing-service POST /api/v1/pricing via PricingClient; "
+                 "PricingResponseDto.getDiscount() returns null after v2.1.0 deploy",
+        breaking_change="pricing-service v2.1.0 renamed field 'discount' to 'discountRate' "
+                        "in PricingResponseDto; order-service still calls getDiscount() → null NPE",
+        upstream_branch="main",
+    )
+
+    ids: dict[str, str] = {}
+    incidents: list[dict] = []
+    for key, scenario in SCENARIO_KEY.items():
+        execute(
+            """INSERT IGNORE INTO error_logs
+                   (id, service_name, environment, error_type, error_message,
+                    stack_trace, severity, occurred_at, metadata)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s)""",
+            (
+                scenario["id"],
+                scenario["service_name"],
+                scenario["environment"],
+                scenario["error_type"],
+                scenario["error_message"],
+                json.dumps(scenario["stack_trace"]),
+                scenario["severity"],
+                json.dumps(scenario["metadata"]),
+            ),
+        )
+        ids[key] = scenario["id"]
+
+        # Pull the row back so we get the actual occurred_at (in case the row
+        # already existed from a prior seed).
+        row = execute_one(
+            "SELECT occurred_at FROM error_logs WHERE id=%s",
+            (scenario["id"],),
+        )
+        incidents.append({
+            "id": scenario["id"],
+            "scenario_key": key,
+            "service": scenario["service_name"],
+            "environment": scenario["environment"],
+            "error_type": scenario["error_type"],
+            "error_message": scenario["error_message"],
+            "severity": scenario["severity"],
+            "stack_trace": scenario["stack_trace"],
+            "occurred_at": str(row["occurred_at"]) if row else None,
+        })
+
+    return {"seeded": True, "error_log_ids": ids, "incidents": incidents}
+
+
+@app.post("/demo/trigger/{scenario}")
+def demo_trigger(scenario: str):
+    """
+    Trigger a chaos endpoint on the order-service AND insert a fresh error log
+    so the RCA agent always sees a pending row to analyze.
+    """
+    if scenario not in CHAOS_ENDPOINTS:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario!r}")
+
+    chaos_url = f"{ORDER_SERVICE_URL}{CHAOS_ENDPOINTS[scenario]}"
+    try:
+        r = httpx.post(chaos_url, timeout=10.0)
+        chaos_status = r.status_code
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"order-service unreachable at {chaos_url}: {exc}",
+        )
+
+    template = SCENARIO_KEY[scenario]
+    new_id = str(uuid.uuid4())
+    execute(
+        """INSERT INTO error_logs
+               (id, service_name, environment, error_type, error_message,
+                stack_trace, severity, occurred_at, metadata)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s)""",
+        (
+            new_id,
+            template["service_name"],
+            template["environment"],
+            template["error_type"],
+            template["error_message"],
+            json.dumps(template["stack_trace"]),
+            template["severity"],
+            json.dumps(template["metadata"]),
+        ),
+    )
+
+    return {"triggered": True, "scenario": scenario, "error_log_id": new_id, "chaos_status": chaos_status}
+
+
+# ── Edit-mode: create a real GitHub PR with the fix ──────────────────────────
+
+@app.post("/rca/{error_log_id}/create_pr")
+def create_pr(error_log_id: str):
+    """
+    Apply the deterministic fix for this incident's scenario and open a real
+    PR on oscorpAI/<repo>.  Requires RCA to have completed first (we need the
+    rca_id from the saved report).
+    """
+    row = execute_one(
+        "SELECT rca_result, metadata FROM error_logs WHERE id=%s",
+        (error_log_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Error log not found")
+    if not row["rca_result"]:
+        raise HTTPException(
+            status_code=409,
+            detail="RCA has not completed for this incident yet — run RCA first.",
+        )
+
+    report = json_loads(row["rca_result"])
+    rca_id = report.get("rca_id")
+    if not rca_id:
+        raise HTTPException(status_code=500, detail="RCA report is missing rca_id")
+
+    metadata = json_loads(row["metadata"]) if row["metadata"] else {}
+    chaos_trigger = metadata.get("chaos_trigger", "")
+    scenario_key = {
+        "quantity-off-by-one": "single_service",
+        "cross-service-npe": "cross_service",
+    }.get(chaos_trigger)
+    if not scenario_key:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"This incident has no known fix recipe "
+                f"(metadata.chaos_trigger={chaos_trigger!r}). "
+                f"Edit mode is only wired for the two demo scenarios."
+            ),
+        )
+
+    try:
+        result = create_fix_pr(scenario_key, rca_id)
+    except FixCreationError as exc:
+        logger.exception("PR creation failed for %s: %s", error_log_id, exc)
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    return result

@@ -1,27 +1,20 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# docker-compose.yml — Local full-stack demo for the rca-agent platform
+# docker-compose.yml — Demo stack for the rca-agent platform
 #
 # One command brings everything up:
+#   cp env.example env   # fill ANTHROPIC_API_KEY and GITHUB_PAT
 #   docker compose up --build
 #
-# Prerequisites:
-#   cp env.example env        # fill in DD_API_KEY and other secrets
-#   docker compose up --build
+# Then open http://localhost:8000/demo
 #
 # Ports:
-#   8080  banking-app          (Spring Boot)
-#   8081  pricing-service      (Spring Boot)
-#   8082  order-service        (Spring Boot, calls pricing-service)
-#   5000  ui-banking           (Flask log viewer → banking-app)
-#   5001  ui-order             (Flask log viewer → order-service, single-service RCA)
-#   5002  ui-pricing-order     (Flask log viewer → pricing+order, cross-service RCA)
-#
-# The rca-agent (FastAPI, port 8000) is still run separately — see HOW_TO_RUN_LOCALLY.md.
+#   8000  rca-agent     (FastAPI + Claude — the demo UI lives here)
+#   8080  banking-app   (Spring Boot)
+#   8081  pricing-service (Spring Boot, v2.1.0 — discountRate rename)
+#   8082  order-service   (Spring Boot — Bug A + Bug B chaos endpoints)
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
-
-  # ── Application services ────────────────────────────────────────────────────
 
   banking-app:
     build:
@@ -36,13 +29,6 @@ services:
       SPRING_DATASOURCE_PASSWORD: ""
       SPRING_JPA_DATABASE_PLATFORM: "org.hibernate.dialect.H2Dialect"
       SPRING_H2_CONSOLE_ENABLED: "false"
-      LOGGING_FILE_NAME: "/var/log/banking-app/app.log"
-      DD_SERVICE: "banking-app"
-      DD_VERSION: "1.0.0"
-      DD_ENV: "dev"
-      DD_LOGS_INJECTION: "true"
-    volumes:
-      - banking-app-logs:/var/log/banking-app
     networks:
       - rca-net
     restart: unless-stopped
@@ -53,17 +39,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8081:8081"
-    environment:
-      LOGGING_FILE_NAME: "/var/log/pricing-service/app.log"
-      DD_SERVICE: "pricing-service"
-      DD_VERSION: "2.1.0"
-      DD_ENV: "dev"
-      DD_LOGS_INJECTION: "true"
-    volumes:
-      - pricing-service-logs:/var/log/pricing-service
     networks:
       - rca-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/api/v1/pricing/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   order-service:
     build:
@@ -73,182 +57,42 @@ services:
       - "8082:8082"
     environment:
       PRICING_SERVICE_URL: "http://pricing-service:8081"
-      LOGGING_FILE_NAME: "/var/log/order-service/app.log"
-      DD_SERVICE: "order-service"
-      DD_VERSION: "1.0.0"
-      DD_ENV: "dev"
-      DD_LOGS_INJECTION: "true"
-    volumes:
-      - order-service-logs:/var/log/order-service
     depends_on:
-      - pricing-service
+      pricing-service:
+        condition: service_healthy
     networks:
       - rca-net
     restart: unless-stopped
-
-  # ── Datadog agent ───────────────────────────────────────────────────────────
-  # One shared agent monitors log files for all three services.
-  # Credentials come from the `env` file (copy from env.example).
-
-  dd-agent:
-    image: gcr.io/datadoghq/agent:7
-    env_file: env
-    environment:
-      DD_LOGS_ENABLED: "true"
-      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "false"
-      DD_CONTAINER_EXCLUDE: "name:datadog-agent"
-      DD_LOGS_CONFIG_BATCH_WAIT: "1"
-      DD_LOGS_CONFIG_USE_HTTP: "true"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /proc/:/host/proc/:ro
-      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
-      # Log directories — read-only; the named volumes are shared with app containers
-      - banking-app-logs:/var/log/banking-app:ro
-      - pricing-service-logs:/var/log/pricing-service:ro
-      - order-service-logs:/var/log/order-service:ro
-      # Datadog log collection configs for each service
-      - ./datadog/conf.d:/conf.d:ro
-    networks:
-      - rca-net
-    depends_on:
-      - banking-app
-      - pricing-service
-      - order-service
-
-  # ── Python agents ───────────────────────────────────────────────────────────
-  # MySQL runs on the host, not in Docker.  Both containers reach it via
-  # host.docker.internal (mapped to host-gateway so it works on Linux/WSL too).
-
-  ingestion-agent:
-    build:
-      # Build context is banking-app-master/ — the Dockerfile copies projects.yaml
-      # from the root of that directory into the image for MODE=datadog_poll.
-      context: ./banking-app-master
-      dockerfile: error-ingestion-agent/Dockerfile
-    env_file: env        # DD_API_KEY, DD_APP_KEY, DD_SITE, GEMINI_API_KEY
-    environment:
-      DATABASE_URL: mysql+pymysql://rca:Rca12345@host.docker.internal:3306/rca_db
-      MODE: "db"                              # tail log file and insert errors into MySQL
-      LOG_FILE_PATH: "/var/log/banking-app/app.log"
-      SERVICE_NAME: "banking-app"
-      ENVIRONMENT: "dev"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Linux/WSL: map host.docker.internal → host
-    volumes:
-      - banking-app-logs:/var/log/banking-app:ro
-    depends_on:
-      - banking-app
-    networks:
-      - rca-net
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8082/api/v1/orders/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   rca-agent:
     build:
       context: ./banking-app-master/rca-agent
     ports:
       - "8000:8000"
-    env_file: env        # ANTHROPIC_API_KEY, GITHUB_PAT
+    env_file: env        # ANTHROPIC_API_KEY, GITHUB_PAT, DATABASE_URL
     environment:
-      DATABASE_URL: mysql+pymysql://rca:Rca12345@host.docker.internal:3306/rca_db
       OBSERVABILITY_ADAPTER: "local"
       CICD_ADAPTER: "mock"
       GITHUB_ORG: "oscorpAI"
       MODEL: "claude-sonnet-4-6"
-      MAX_REACT_ITERATIONS: "20"
-      RCA_POLL_ENABLED: "true"
-      RCA_POLL_INTERVAL_SECONDS: "30"
+      MAX_REACT_ITERATIONS: "35"
+      RCA_POLL_ENABLED: "false"
+      ORDER_SERVICE_URL: "http://order-service:8082"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - banking-app
-      - pricing-service
-      - order-service
-      - ingestion-agent
+      order-service:
+        condition: service_healthy
     networks:
       - rca-net
     restart: unless-stopped
 
-  # ── Demo UIs ────────────────────────────────────────────────────────────────
-  # Three instances of the same Flask log-viewer, each scoped to a different
-  # service (or pair of services for the cross-service demo).
-  # The Flask app reads LOG_FILE_PATH for local file tailing and DD_QUERY for
-  # the Datadog log search mode.
-
-  ui-banking:
-    build:
-      context: ./ui
-    ports:
-      - "5000:5000"
-    environment:
-      LOG_FILE_PATH: "/var/log/banking-app/app.log"
-      DD_QUERY: "service:banking-app"
-      SERVICE_LABEL: "banking-app"
-      # The RCA agent runs on the host — browser calls localhost:8000 directly
-      RCA_AGENT_URL: "http://localhost:8000"
-      # Docker-internal hostnames for the server-side chaos proxy
-      BANKING_APP_HOST: "banking-app"
-    env_file: env
-    volumes:
-      - banking-app-logs:/var/log/banking-app:ro
-    depends_on:
-      - banking-app
-    networks:
-      - rca-net
-    restart: unless-stopped
-
-  ui-order:
-    build:
-      context: ./ui
-    ports:
-      - "5001:5000"
-    environment:
-      LOG_FILE_PATH: "/var/log/order-service/app.log"
-      DD_QUERY: "service:order-service"
-      SERVICE_LABEL: "order-service (single-service RCA)"
-      RCA_AGENT_URL: "http://localhost:8000"
-      ORDER_HOST: "order-service"
-    env_file: env
-    volumes:
-      - order-service-logs:/var/log/order-service:ro
-    depends_on:
-      - order-service
-    networks:
-      - rca-net
-    restart: unless-stopped
-
-  ui-pricing-order:
-    build:
-      context: ./ui
-    ports:
-      - "5002:5000"
-    environment:
-      # Show order-service log file; Datadog query covers both services
-      LOG_FILE_PATH: "/var/log/order-service/app.log"
-      DD_QUERY: "service:pricing-service OR service:order-service"
-      SERVICE_LABEL: "pricing-service + order-service (cross-service RCA demo)"
-      RCA_AGENT_URL: "http://localhost:8000"
-      PRICING_HOST: "pricing-service"
-      ORDER_HOST: "order-service"
-    env_file: env
-    volumes:
-      - pricing-service-logs:/var/log/pricing-service:ro
-      - order-service-logs:/var/log/order-service:ro
-    depends_on:
-      - pricing-service
-      - order-service
-    networks:
-      - rca-net
-    restart: unless-stopped
-
-# ── Named volumes ─────────────────────────────────────────────────────────────
-# Shared between app containers (write) and dd-agent + UI containers (read).
-volumes:
-  banking-app-logs:
-  pricing-service-logs:
-  order-service-logs:
-
-# ── Network ───────────────────────────────────────────────────────────────────
 networks:
   rca-net:
     driver: bridge

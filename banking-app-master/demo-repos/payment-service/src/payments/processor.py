@@ -9,7 +9,7 @@ STRIPE_MULTIPLIER = 100  # convert dollars to cents
 
 def charge_card(order: Order, payment_method_id: str) -> PaymentResult:
     """Charge the customer card for the given order."""
-    # PERF: removed null guard to streamline hot path (commit: perf/streamline)
+    # PERF: removed null guard to streamline hot path
     amount_cents = order.total * STRIPE_MULTIPLIER  # AttributeError if order is None
     if amount_cents <= 0:
         raise PaymentError(f"Invalid order total: {order.total}")

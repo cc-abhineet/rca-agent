@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>rca-agent · Live Demo</title>
+  <title>rca-agent · Demo</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -25,708 +25,1019 @@
       --purple: #a855f7;
       --blue: #60a5fa;
       --gray: #94a3b8;
+      --teal: #2dd4bf;
     }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-                   'Helvetica Neue', Arial, sans-serif;
-      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
-    /* ── Top Nav ── */
+    /* ── Nav ── */
     .nav {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       padding: 0 24px;
-      height: 56px;
+      height: 52px;
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       flex-shrink: 0;
     }
-    .nav-logo {
-      font-size: 1.1rem;
-      font-weight: 800;
-      color: var(--accent-light);
-      letter-spacing: -.02em;
-    }
+    .nav-logo { font-size: 1rem; font-weight: 800; color: var(--accent-light); letter-spacing: -.02em; }
     .nav-logo span { color: var(--text-muted); font-weight: 400; }
     .nav-badge {
       background: rgba(99,102,241,.15);
       color: var(--accent-light);
       border: 1px solid rgba(99,102,241,.3);
-      padding: 2px 10px;
+      padding: 2px 9px;
       border-radius: 20px;
-      font-size: .72rem;
+      font-size: .7rem;
       font-weight: 700;
       letter-spacing: .05em;
       text-transform: uppercase;
     }
-    .nav-spacer { flex: 1; }
-    .nav-hint {
-      color: var(--text-dim);
-      font-size: .78rem;
-    }
-
-    /* ── Main layout ── */
-    .main {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 420px 1fr;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    @media (max-width: 900px) {
-      .main { grid-template-columns: 1fr; }
-      .right-panel { display: none; }
-      .right-panel.visible { display: flex; }
-    }
-
-    /* ── Left panel ── */
-    .left-panel {
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: var(--surface2);
-    }
-
-    .form-area {
-      padding: 20px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      background: var(--surface);
-    }
-
-    .form-title {
-      font-size: .75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--text-muted);
-      margin-bottom: 14px;
-    }
-
-    .form-group { margin-bottom: 12px; }
-    .form-label {
-      display: block;
-      font-size: .78rem;
-      color: var(--text-muted);
-      margin-bottom: 5px;
+    .nav-model {
+      background: rgba(45,212,191,.1);
+      color: var(--teal);
+      border: 1px solid rgba(45,212,191,.25);
+      padding: 2px 9px;
+      border-radius: 20px;
+      font-size: .7rem;
       font-weight: 600;
+      font-family: 'JetBrains Mono', Consolas, monospace;
     }
+    .nav-spacer { flex: 1; }
 
-    select, input[type="text"] {
-      width: 100%;
+    .mode-toggle {
+      display: inline-flex;
       background: var(--surface2);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      padding: 8px 12px;
-      font-size: .88rem;
-      outline: none;
-      transition: border-color .15s;
-      font-family: inherit;
-    }
-    select:focus, input[type="text"]:focus {
-      border-color: var(--accent);
-    }
-    select option { background: var(--surface); }
-
-    .run-btn {
-      width: 100%;
-      padding: 10px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
       border-radius: 8px;
-      font-size: .92rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background .15s, transform .1s;
-      margin-top: 4px;
-      letter-spacing: .02em;
+      padding: 3px;
     }
-    .run-btn:hover:not(:disabled) { background: #4f46e5; }
-    .run-btn:active:not(:disabled) { transform: scale(.98); }
-    .run-btn:disabled {
-      background: #312e81;
-      color: #6366f1;
-      cursor: not-allowed;
+    .mode-option {
+      padding: 4px 14px;
+      font-size: .76rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background .15s, color .15s;
+      user-select: none;
+    }
+    .mode-option.active { background: var(--accent); color: #fff; }
+    .mode-option.disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+    .mode-hint {
+      font-size: .68rem;
+      color: var(--text-dim);
+      margin-left: 4px;
+      font-style: italic;
+      max-width: 140px;
     }
 
-    .status-bar {
+    .nav-health { display: flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--text-muted); }
+    .health-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-dim);
+      transition: background .3s;
+    }
+    .health-dot.ok { background: var(--green); animation: pulse 2s ease-in-out infinite; }
+    .health-dot.err { background: var(--red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .4; }
+    }
+
+    /* ── Layout: inbox + detail ── */
+    .workspace {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* Inbox sidebar */
+    .inbox {
+      width: 320px;
+      flex-shrink: 0;
+      background: var(--surface2);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .inbox::-webkit-scrollbar { width: 4px; }
+    .inbox::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .inbox-header {
+      padding: 14px 18px 10px;
+      font-size: .68rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: .12em;
+      text-transform: uppercase;
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 20px;
-      background: var(--surface);
       border-bottom: 1px solid var(--border);
-      font-size: .78rem;
-      color: var(--text-muted);
       flex-shrink: 0;
     }
-    .status-dot {
-      width: 8px; height: 8px;
+    .inbox-count {
+      background: rgba(99,102,241,.15);
+      color: var(--accent-light);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: .65rem;
+    }
+
+    .inbox-item {
+      padding: 12px 16px 12px 18px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      gap: 10px;
+      transition: background .12s;
+      position: relative;
+      border-left: 3px solid transparent;
+    }
+    .inbox-item:hover { background: var(--surface); }
+    .inbox-item.selected {
+      background: rgba(99,102,241,.1);
+      border-left-color: var(--accent);
+    }
+    .inbox-item.resolved { opacity: .55; }
+    .inbox-item.resolved:hover { background: transparent; cursor: default; }
+
+    .inbox-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      margin-top: 6px; flex-shrink: 0;
+    }
+    .inbox-dot-critical { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,.5); }
+    .inbox-dot-high     { background: var(--orange); box-shadow: 0 0 6px rgba(249,115,22,.5); }
+    .inbox-dot-resolved { background: var(--green); opacity: .5; }
+
+    .inbox-body { flex: 1; min-width: 0; }
+    .inbox-title {
+      font-size: .83rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .inbox-meta {
+      font-size: .7rem;
+      color: var(--text-muted);
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .inbox-svc {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      color: var(--blue);
+      font-size: .68rem;
+    }
+    .inbox-ts { color: var(--text-dim); }
+    .inbox-new {
+      font-size: .58rem;
+      background: var(--accent);
+      color: #fff;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 700;
+      letter-spacing: .04em;
+    }
+    .inbox-resolved-tag {
+      font-size: .58rem;
+      background: rgba(34,197,94,.15);
+      color: var(--green);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    /* Detail pane */
+    .detail {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .incident-header {
+      padding: 16px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .incident-title-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .incident-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .incident-sev {
+      padding: 2px 9px;
+      border-radius: 10px;
+      font-size: .65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .sev-critical { background: rgba(239,68,68,.15); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
+    .sev-high     { background: rgba(249,115,22,.15); color: var(--orange); border: 1px solid rgba(249,115,22,.3); }
+
+    .incident-meta {
+      font-size: .76rem;
+      color: var(--text-muted);
+      display: flex;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .incident-meta code {
+      color: var(--blue);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+    }
+
+    .incident-error {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: .76rem;
+      color: var(--red);
+      background: rgba(239,68,68,.06);
+      border: 1px solid rgba(239,68,68,.15);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      max-height: 48px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .incident-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-investigate {
+      padding: 8px 20px;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      border-radius: 7px;
+      font-size: .85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s;
+      font-family: inherit;
+    }
+    .btn-investigate:hover:not(:disabled) { background: #4f46e5; }
+    .btn-investigate:disabled { background: #312e81; color: #6366f1; cursor: not-allowed; }
+
+    .action-mode-display {
+      font-size: .76rem;
+      color: var(--text-muted);
+    }
+    .action-mode-display strong { color: var(--accent-light); }
+
+    /* Empty detail state */
+    .detail-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      gap: 14px;
+    }
+    .detail-empty .big-icon {
+      font-size: 3rem;
+      animation: breathe 2.5s ease-in-out infinite;
+    }
+    @keyframes breathe {
+      0%, 100% { opacity: .35; transform: scale(1); }
+      50%       { opacity: .7;  transform: scale(1.05); }
+    }
+
+    /* Tabs */
+    .tab-strip {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 0 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      height: 42px;
+    }
+    .tab {
+      padding: 0 16px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+      user-select: none;
+    }
+    .tab.active { color: var(--accent-light); border-bottom-color: var(--accent); }
+    .tab:hover:not(.active):not(.disabled) { color: var(--text); }
+    .tab.disabled { opacity: .35; cursor: not-allowed; }
+    .tab-check {
+      color: var(--green);
+      font-size: .75rem;
+    }
+    .tab-spin {
+      width: 10px; height: 10px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
       border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .tab-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: .74rem;
+      color: var(--text-muted);
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
       background: var(--text-dim);
       flex-shrink: 0;
     }
-    .status-dot.running {
-      background: var(--green);
-      animation: pulse 1s ease-in-out infinite;
-    }
-    .status-dot.done { background: var(--green); }
-    .status-dot.error { background: var(--red); }
+    .status-dot.running { background: var(--green); animation: pulse 1s ease-in-out infinite; }
+    .status-dot.done    { background: var(--green); }
+    .status-dot.error   { background: var(--red); }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: .5; transform: scale(.85); }
-    }
+    /* Tab panels */
+    .tab-panels { flex: 1; min-height: 0; position: relative; }
+    .tab-panel { position: absolute; inset: 0; display: none; flex-direction: column; }
+    .tab-panel.active { display: flex; }
 
-    /* ── Trace feed ── */
+    /* Thinking panel */
     .trace-feed {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 16px;
+      padding: 12px 24px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
       font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-      font-size: .78rem;
+      font-size: .77rem;
     }
     .trace-feed::-webkit-scrollbar { width: 4px; }
-    .trace-feed::-webkit-scrollbar-track { background: transparent; }
     .trace-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
     .trace-empty {
       color: var(--text-dim);
       text-align: center;
-      padding: 40px 20px;
+      padding: 60px 40px;
       font-family: -apple-system, sans-serif;
       font-size: .85rem;
       line-height: 1.7;
     }
-    .trace-empty .hint {
-      font-size: 2rem;
-      margin-bottom: 12px;
-    }
+    .trace-empty .hint { font-size: 2.5rem; margin-bottom: 14px; }
 
     .trace-event {
       display: flex;
       gap: 10px;
-      padding: 6px 10px;
+      padding: 5px 10px;
       border-radius: 6px;
       line-height: 1.5;
-      animation: fadeSlideIn .25s ease-out both;
+      animation: fadeSlideIn .2s ease-out both;
       border-left: 2px solid transparent;
     }
-
     @keyframes fadeSlideIn {
-      from { opacity: 0; transform: translateY(6px); }
+      from { opacity: 0; transform: translateY(5px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-
-    .trace-ts {
-      color: var(--text-dim);
-      font-size: .7rem;
-      white-space: nowrap;
-      flex-shrink: 0;
-      padding-top: 1px;
-    }
-
+    .trace-ts { color: var(--text-dim); font-size: .68rem; white-space: nowrap; flex-shrink: 0; padding-top: 1px; }
     .trace-icon { font-size: 1em; flex-shrink: 0; }
-
-    .trace-text {
-      flex: 1;
-      word-break: break-word;
-    }
-
+    .trace-text { flex: 1; word-break: break-word; }
     .trace-reasoning {
-      color: var(--gray);
-      font-style: italic;
-      font-family: -apple-system, sans-serif;
-      font-size: .75rem;
+      color: var(--gray); font-style: italic;
+      font-family: -apple-system, sans-serif; font-size: .74rem;
     }
     .trace-reasoning .expand-btn {
-      color: var(--accent-light);
-      cursor: pointer;
-      text-decoration: underline;
-      font-style: normal;
-      margin-left: 4px;
-      font-size: .7rem;
+      color: var(--accent-light); cursor: pointer; text-decoration: underline;
+      font-style: normal; margin-left: 4px; font-size: .7rem;
     }
 
-    /* Event type styles */
-    .ev-start    { background: rgba(96,165,250,.06); border-left-color: var(--blue); }
-    .ev-tool_call{ background: rgba(168,85,247,.06); border-left-color: var(--purple); }
+    .ev-start     { background: rgba(96,165,250,.06);  border-left-color: var(--blue); }
+    .ev-tool_call { background: rgba(168,85,247,.06);  border-left-color: var(--purple); }
     .ev-tool_result { background: rgba(34,197,94,.06); border-left-color: var(--green); }
-    .ev-cache_hit{ background: rgba(251,191,36,.06); border-left-color: var(--yellow); }
-    .ev-reasoning{ background: rgba(148,163,184,.04); border-left-color: var(--border); }
-    .ev-sub_agent{ background: rgba(249,115,22,.06); border-left-color: var(--orange); }
-    .ev-complete { background: rgba(34,197,94,.1);  border-left-color: var(--green); }
-    .ev-error    { background: rgba(239,68,68,.08); border-left-color: var(--red); }
-    .ev-done     { background: rgba(34,197,94,.08); border-left-color: var(--green); }
+    .ev-cache_hit { background: rgba(251,191,36,.06);  border-left-color: var(--yellow); }
+    .ev-reasoning { background: rgba(148,163,184,.04); border-left-color: var(--border); }
+    .ev-sub_agent { background: rgba(249,115,22,.06);  border-left-color: var(--orange); }
+    .ev-complete  { background: rgba(34,197,94,.1);    border-left-color: var(--green); }
+    .ev-error     { background: rgba(239,68,68,.08);   border-left-color: var(--red); }
+    .ev-done      { background: rgba(34,197,94,.08);   border-left-color: var(--green); }
 
-    .col-blue    { color: var(--blue); }
-    .col-purple  { color: var(--purple); }
-    .col-green   { color: var(--green); }
-    .col-yellow  { color: var(--yellow); }
-    .col-orange  { color: var(--orange); }
-    .col-red     { color: var(--red); }
-    .col-gray    { color: var(--gray); }
-    .col-accent  { color: var(--accent-light); }
-    .fw-bold     { font-weight: 700; }
+    .col-blue   { color: var(--blue); }
+    .col-purple { color: var(--purple); }
+    .col-green  { color: var(--green); }
+    .col-yellow { color: var(--yellow); }
+    .col-orange { color: var(--orange); }
+    .col-red    { color: var(--red); }
+    .col-gray   { color: var(--gray); }
+    .col-accent { color: var(--accent-light); }
+    .fw-bold    { font-weight: 700; }
 
-    /* ── Right panel ── */
-    .right-panel {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: var(--bg);
-    }
-
-    .report-header {
-      padding: 14px 24px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-shrink: 0;
-    }
-    .report-header-title {
-      font-size: .75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--text-muted);
-    }
-    .report-header-status { color: var(--text-dim); font-size: .78rem; }
-
-    .report-frame {
-      flex: 1;
-      overflow: hidden;
+    /* Report panel */
+    .report-panel {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column;
       position: relative;
     }
-
     .report-placeholder {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--text-dim);
-      gap: 16px;
-      padding: 40px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 100%; color: var(--text-dim); gap: 14px; padding: 40px;
     }
     .report-placeholder .big-icon {
       font-size: 3rem;
       animation: breathe 2.5s ease-in-out infinite;
     }
-    @keyframes breathe {
-      0%, 100% { opacity: .4; transform: scale(1); }
-      50%       { opacity: .8; transform: scale(1.05); }
-    }
     .report-placeholder p {
-      font-size: .9rem;
-      text-align: center;
-      line-height: 1.7;
-      max-width: 300px;
+      font-size: .88rem; text-align: center; line-height: 1.7; max-width: 360px;
     }
-
     .report-iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: none;
-      background: #0f1117;
+      width: 100%; height: 100%; border: none;
+      display: none; background: var(--bg);
     }
     .report-iframe.visible {
       display: block;
-      animation: fadeIn .5s ease-out;
+      animation: fadeIn .4s ease-out;
     }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
-    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    /* open-report link strip */
     .report-link-strip {
-      padding: 8px 24px;
+      padding: 7px 24px;
       background: var(--surface);
       border-top: 1px solid var(--border);
-      display: none;
-      align-items: center;
-      gap: 12px;
+      display: none; align-items: center; gap: 14px;
       flex-shrink: 0;
     }
     .report-link-strip.visible { display: flex; }
-    .report-link-strip a {
-      color: var(--accent-light);
-      font-size: .78rem;
-      text-decoration: none;
-    }
+    .report-link-strip a { color: var(--accent-light); font-size: .78rem; text-decoration: none; }
     .report-link-strip a:hover { text-decoration: underline; }
+
+    /* PR panel */
+    .pr-panel {
+      flex: 1; min-height: 0;
+      overflow-y: auto;
+      padding: 22px 28px;
+    }
+    .pr-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      animation: fadeIn .4s ease-out;
+    }
+    .pr-card-header {
+      padding: 14px 18px;
+      background: linear-gradient(180deg, rgba(34,197,94,.1) 0%, rgba(34,197,94,.04) 100%);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .pr-card-title-line {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .pr-status-pill {
+      background: rgba(34,197,94,.18);
+      color: var(--green);
+      border: 1px solid rgba(34,197,94,.3);
+      padding: 2px 9px;
+      border-radius: 10px;
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .pr-card-title { font-size: .95rem; font-weight: 700; color: var(--text); }
+    .pr-card-branch {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: .72rem;
+      background: var(--surface2);
+      color: var(--accent-light);
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .pr-card-meta {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: .8rem;
+      color: var(--text-muted);
+      display: flex; gap: 24px;
+      flex-wrap: wrap;
+    }
+    .pr-meta-label {
+      color: var(--text-dim);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      display: block;
+      margin-bottom: 3px;
+    }
+    .pr-meta-val {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      color: var(--text);
+      font-size: .76rem;
+    }
+    .pr-card-diff {
+      background: #0a0c14;
+      padding: 14px 18px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: .74rem;
+      line-height: 1.55;
+      max-height: 420px;
+      overflow: auto;
+    }
+    .pr-card-diff > span { display: block; padding: 0 4px; }
+    .diff-meta { color: var(--text-muted); }
+    .diff-hunk { color: var(--accent-light); }
+    .diff-add  { color: #4ade80; background: rgba(34,197,94,.08); }
+    .diff-del  { color: #f87171; background: rgba(239,68,68,.08); }
+    .diff-ctx  { color: var(--text); }
+    .pr-card-actions {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px;
+    }
+    .btn-view-pr {
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 7px;
+      text-decoration: none;
+      font-size: .82rem;
+      font-weight: 600;
+      transition: background .15s;
+    }
+    .btn-view-pr:hover { background: #4f46e5; }
+    .pr-error-card {
+      background: rgba(239,68,68,.06);
+      border: 1px solid rgba(239,68,68,.2);
+      border-radius: 10px;
+      padding: 16px 20px;
+      animation: fadeIn .4s ease-out;
+    }
+    .pr-error-title {
+      font-size: .9rem;
+      font-weight: 700;
+      color: var(--red);
+      margin-bottom: 6px;
+    }
+    .pr-error-detail {
+      font-size: .8rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+    }
+
+    /* Toast */
+    .toast-container {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 1000; pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: .82rem; font-weight: 600;
+      animation: toastIn .2s ease-out;
+      pointer-events: auto;
+      max-width: 380px;
+    }
+    .toast-success { background: #14532d; color: #86efac; border: 1px solid #166534; }
+    .toast-info    { background: #1e3a8a; color: #bfdbfe; border: 1px solid #1e40af; }
+    .toast-error   { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
 
-<!-- Nav -->
 <nav class="nav">
-  <div class="nav-logo">🔍 rca-agent <span>/ live demo</span></div>
-  <div class="nav-badge">Preview</div>
+  <div class="nav-logo">rca-agent <span>/ demo</span></div>
+  <div class="nav-badge">Live</div>
+  <div class="nav-model" id="nav-model">loading…</div>
+
   <div class="nav-spacer"></div>
-  <div class="nav-hint">Pick a scenario → click Run RCA → watch the agent think</div>
+
+  <div class="mode-toggle" id="mode-toggle" title="Ask = RCA only. Edit = RCA + draft a real PR with the fix.">
+    <div class="mode-option active" id="mode-ask" onclick="setMode('ask')">Ask</div>
+    <div class="mode-option" id="mode-edit" onclick="setMode('edit')">Edit</div>
+  </div>
+  <div class="mode-hint" id="mode-hint">Diagnose only</div>
+
+  <div class="nav-health">
+    <div class="health-dot" id="health-dot"></div>
+    <span id="health-text">checking…</span>
+  </div>
 </nav>
 
-<!-- Main -->
-<div class="main">
+<div class="workspace">
 
-  <!-- LEFT PANEL -->
-  <div class="left-panel">
-
-    <!-- Form -->
-    <div class="form-area">
-      <div class="form-title">Trigger RCA Analysis</div>
-
-      <div class="form-group">
-        <label class="form-label" for="scenario-select">Demo Scenario</label>
-        <select id="scenario-select">
-          <option value="">Loading scenarios…</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="error-log-id">Error Log ID</label>
-        <input type="text" id="error-log-id" placeholder="UUID auto-filled from scenario" readonly
-               style="cursor:default;color:var(--text-muted);">
-      </div>
-
-      <button class="run-btn" id="run-btn" onclick="startRCA()">
-        🚀 Run RCA
-      </button>
+  <aside class="inbox" id="inbox">
+    <div class="inbox-header">
+      <span>Incidents</span>
+      <span class="inbox-count" id="inbox-count">0</span>
     </div>
-
-    <!-- Status bar -->
-    <div class="status-bar">
-      <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">Ready</span>
-    </div>
-
-    <!-- Trace feed -->
-    <div class="trace-feed" id="trace-feed">
-      <div class="trace-empty">
-        <div class="hint">🤖</div>
-        <p>Select a demo scenario above and click <strong style="color:var(--accent-light)">Run RCA</strong> to watch the agent investigate in real time.</p>
-        <p style="margin-top:10px;font-size:.78rem;color:var(--text-dim);">
-          Each tool call, cache hit, and Claude's reasoning will appear here as it happens.
-        </p>
+    <div id="inbox-items">
+      <div style="padding:24px 18px;font-size:.78rem;color:var(--text-dim);text-align:center">
+        Loading incidents…
       </div>
     </div>
+  </aside>
 
-  </div>
-
-  <!-- RIGHT PANEL -->
-  <div class="right-panel" id="right-panel">
-    <div class="report-header">
-      <div class="report-header-title">📄 RCA Report</div>
-      <div class="report-header-status" id="report-status">Waiting for analysis…</div>
+  <section class="detail" id="detail">
+    <div class="detail-empty" id="detail-empty">
+      <div class="big-icon">📡</div>
+      <p style="font-size:.88rem;text-align:center;max-width:280px">
+        Select an incident from the inbox to investigate.
+      </p>
     </div>
 
-    <div class="report-frame" id="report-frame">
-      <div class="report-placeholder" id="report-placeholder">
-        <div class="big-icon">📋</div>
-        <p>The full RCA report will appear here once the agent completes its analysis.</p>
+    <div id="detail-content" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="incident-header">
+        <div class="incident-title-row">
+          <div class="incident-title" id="incident-title">—</div>
+          <div class="incident-sev" id="incident-sev">—</div>
+        </div>
+        <div class="incident-meta" id="incident-meta">—</div>
+        <div class="incident-error" id="incident-error">—</div>
+        <div class="incident-actions">
+          <button class="btn-investigate" id="btn-investigate" onclick="startRCA()">
+            ▶ Investigate with Claude
+          </button>
+          <div class="action-mode-display">
+            mode: <strong id="action-mode-label">Ask</strong>
+          </div>
+        </div>
       </div>
-      <iframe class="report-iframe" id="report-iframe" title="RCA Report"></iframe>
-    </div>
 
-    <div class="report-link-strip" id="report-link-strip">
-      <span style="color:var(--text-muted);font-size:.78rem;">Report ready</span>
-      <a id="report-open-link" href="#" target="_blank">Open in new tab ↗</a>
-      <a id="report-json-link" href="#" target="_blank">View JSON ↗</a>
+      <div class="tab-strip">
+        <div class="tab active" id="tab-thinking" onclick="switchTab('thinking')">Agent Thinking</div>
+        <div class="tab" id="tab-report" onclick="switchTab('report')">Final Report</div>
+        <div class="tab disabled" id="tab-pr" onclick="switchTab('pr')">
+          <span>Pull Request</span>
+          <span id="tab-pr-indicator"></span>
+        </div>
+        <div class="tab-status">
+          <div class="status-dot" id="status-dot"></div>
+          <span id="status-text">Ready</span>
+        </div>
+      </div>
+
+      <div class="tab-panels">
+        <div class="tab-panel active" id="panel-thinking">
+          <div class="trace-feed" id="trace-feed">
+            <div class="trace-empty">
+              <div class="hint">🤖</div>
+              <p>Click <strong style="color:var(--accent-light)">▶ Investigate</strong> to watch the agent reason in real time.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-report">
+          <div class="report-panel">
+            <div class="report-placeholder" id="report-placeholder">
+              <div class="big-icon">📋</div>
+              <p>The RCA report will appear here once the agent completes its analysis.</p>
+            </div>
+            <iframe class="report-iframe" id="report-iframe" title="RCA Report"></iframe>
+          </div>
+          <div class="report-link-strip" id="report-link-strip">
+            <span style="color:var(--text-muted);font-size:.75rem">Report ready</span>
+            <a id="report-open-link" href="#" target="_blank">Open in new tab ↗</a>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-pr">
+          <div class="pr-panel" id="pr-panel">
+            <div class="detail-empty">
+              <div class="big-icon">🔧</div>
+              <p style="font-size:.88rem;text-align:center;max-width:320px">
+                Switch to <strong style="color:var(--accent-light)">Edit</strong> mode in the nav and run an investigation to generate a Pull Request.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+  </section>
 
 </div>
+
+<div class="toast-container" id="toast-container"></div>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────────
-let currentEventSource = null;
-let currentErrorLogId = null;
-let currentRcaId = null;
-let eventCount = 0;
-
-// ── Load scenarios on startup ──────────────────────────────────────────────────
-async function loadScenarios() {
-  const sel = document.getElementById('scenario-select');
-  try {
-    const res = await fetch('/demo/scenarios');
-    const data = await res.json();
-    const scenarios = data.scenarios || {};
-    sel.innerHTML = '';
-    const labels = {
-      'payment-service': '💳 payment-service — AttributeError (critical)',
-      'order-service':   '📦 order-service — PydanticUserError (critical)',
-      'notification-service': '📨 notification-service — KeyError (high, sub-agent)',
-    };
-    let first = true;
-    for (const [svc, id] of Object.entries(scenarios)) {
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = labels[svc] || svc;
-      if (first) {
-        document.getElementById('error-log-id').value = id;
-        first = false;
-      }
-      sel.appendChild(opt);
-    }
-    if (!Object.keys(scenarios).length) {
-      sel.innerHTML = '<option value="">No scenarios found — run demo_seed_data.py first</option>';
-    }
-  } catch (e) {
-    sel.innerHTML = '<option value="">Error loading scenarios: ' + e.message + '</option>';
-  }
-}
-
-document.getElementById('scenario-select').addEventListener('change', function() {
-  document.getElementById('error-log-id').value = this.value;
-});
-
-// ── Trace event rendering ──────────────────────────────────────────────────────
-const EVENT_CONFIG = {
-  start:       { icon: '🚀', cls: 'col-blue',   evCls: 'ev-start' },
-  tool_call:   { icon: '🔧', cls: 'col-purple',  evCls: 'ev-tool_call' },
-  tool_result: { icon: '✅', cls: 'col-green',   evCls: 'ev-tool_result' },
-  cache_hit:   { icon: '⚡', cls: 'col-yellow',  evCls: 'ev-cache_hit' },
-  reasoning:   { icon: '💭', cls: 'col-gray',    evCls: 'ev-reasoning' },
-  sub_agent:   { icon: '🤖', cls: 'col-orange',  evCls: 'ev-sub_agent' },
-  complete:    { icon: '🎯', cls: 'col-green fw-bold', evCls: 'ev-complete' },
-  done:        { icon: '🎉', cls: 'col-green fw-bold', evCls: 'ev-done' },
-  error:       { icon: '❌', cls: 'col-red',     evCls: 'ev-error' },
+const state = {
+  incidents: [],
+  selectedId: null,
+  mode: 'ask',                          // 'ask' | 'edit'
+  running: false,
+  prCreating: false,
+  eventCount: 0,
+  activeTab: 'thinking',
+  // Per-incident saved UI state so switching items is non-destructive
+  saved: {},                            // { [incidentId]: {...snapshot...} }
 };
 
-function formatTs(isoStr) {
-  try {
-    const d = new Date(isoStr);
-    return d.toTimeString().slice(0, 8);
-  } catch { return '--:--:--'; }
+function freshSnapshot() {
+  return {
+    traceHtml: null,
+    reportVisible: false, reportUrl: null,
+    linkVisible: false, openHref: null,
+    pr: null,            // { url, branch, title, files_changed, diff_html }
+    prError: null,       // string
+    statusDot: '', statusText: 'Ready',
+    activeTab: 'thinking',
+    eventCount: 0,
+  };
 }
 
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+// ── Toast ──────────────────────────────────────────────────────────────────────
+function showToast(msg, type = 'success') {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
 }
 
-function buildEventText(ev) {
-  switch (ev.type) {
-    case 'start':
-      return `Starting RCA for <strong>${escHtml(ev.service)}</strong> `
-           + `(<span style="color:var(--red)">${escHtml(ev.error_type)}</span>)`;
-
-    case 'tool_call': {
-      const inp = ev.input || {};
-      let detail = '';
-      if (inp.path)   detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.path)}</code>`;
-      if (inp.query)  detail = ` · "${escHtml(inp.query)}"`;
-      if (inp.commit_sha) detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.commit_sha.slice(0,8))}</code>`;
-      if (inp.service_name) detail = ` · ${escHtml(inp.service_name)}`;
-      return `Calling <strong style="color:var(--purple)">${escHtml(ev.tool)}</strong>${detail}`;
-    }
-
-    case 'tool_result':
-      return escHtml(ev.summary || `${ev.tool} returned`);
-
-    case 'cache_hit':
-      return `Cache hit: <code style="color:var(--yellow)">${escHtml(ev.key)}</code>`;
-
-    case 'reasoning': {
-      const full = ev.text || '';
-      const truncLen = 220;
-      if (full.length <= truncLen) {
-        return `<span class="trace-reasoning">"${escHtml(full)}"</span>`;
-      }
-      const short = escHtml(full.slice(0, truncLen));
-      const rest = escHtml(full.slice(truncLen));
-      const uid = 'r' + Date.now() + Math.random().toString(36).slice(2,6);
-      return `<span class="trace-reasoning">"${short}<span id="${uid}-rest" style="display:none">${rest}</span>…`
-           + `<span class="expand-btn" onclick="expandReasoning('${uid}')">show more</span>"</span>`;
-    }
-
-    case 'sub_agent':
-      return `Launching sub-agent: <em>${escHtml(ev.action)}</em>`;
-
-    case 'complete':
-      return `<strong>RCA complete</strong> — confidence: `
-           + `<strong style="color:var(--green)">${escHtml((ev.confidence||'').toUpperCase())}</strong> `
-           + `(${ev.iterations} iterations)`;
-
-    case 'done':
-      return `<strong>Analysis finished</strong> — report rendered →`;
-
-    case 'error':
-      return `<strong>Error:</strong> ${escHtml(ev.message || 'Unknown error')}`;
-
-    default:
-      return escHtml(JSON.stringify(ev));
+// ── Mode toggle ────────────────────────────────────────────────────────────────
+function setMode(mode) {
+  if (state.running) return;
+  state.mode = mode;
+  document.getElementById('mode-ask').classList.toggle('active', mode === 'ask');
+  document.getElementById('mode-edit').classList.toggle('active', mode === 'edit');
+  document.getElementById('mode-hint').textContent =
+    mode === 'edit' ? 'Diagnose + draft a PR' : 'Diagnose only';
+  document.getElementById('action-mode-label').textContent =
+    mode === 'edit' ? 'Edit' : 'Ask';
+  // Update Investigate button label
+  const btn = document.getElementById('btn-investigate');
+  if (!state.running) {
+    btn.textContent = mode === 'edit' ? '▶ Investigate & Draft PR' : '▶ Investigate with Claude';
   }
 }
 
-function expandReasoning(uid) {
-  const rest = document.getElementById(uid + '-rest');
-  const btn = rest && rest.parentElement && rest.parentElement.querySelector('.expand-btn');
-  if (rest) { rest.style.display = 'inline'; }
-  if (btn)  { btn.style.display = 'none'; }
+// ── Inbox rendering ────────────────────────────────────────────────────────────
+function relativeTime(iso) {
+  if (!iso) return 'just now';
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const sec = Math.max(1, Math.round((now - then) / 1000));
+  if (sec < 60)   return sec + 's ago';
+  const min = Math.round(sec / 60);
+  if (min < 60)   return min + 'm ago';
+  const hr = Math.round(min / 60);
+  if (hr < 24)    return hr + 'h ago';
+  return Math.round(hr / 24) + 'd ago';
 }
 
-function appendEvent(ev) {
-  const feed = document.getElementById('trace-feed');
+function renderInbox() {
+  const wrap = document.getElementById('inbox-items');
+  const count = state.incidents.length;
+  document.getElementById('inbox-count').textContent = count;
 
-  // Remove placeholder on first event
-  if (eventCount === 0) {
-    feed.innerHTML = '';
-  }
-  eventCount++;
-
-  const cfg = EVENT_CONFIG[ev.type] || { icon: '•', cls: 'col-gray', evCls: '' };
-  const ts = formatTs(ev.ts);
-
-  const div = document.createElement('div');
-  div.className = `trace-event ${cfg.evCls}`;
-  div.innerHTML = `
-    <span class="trace-ts">${ts}</span>
-    <span class="trace-icon">${cfg.icon}</span>
-    <span class="trace-text ${cfg.cls}">${buildEventText(ev)}</span>
-  `;
-  feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
-}
-
-// ── Report rendering ───────────────────────────────────────────────────────────
-function showReport(reportDict) {
-  const iframe = document.getElementById('report-iframe');
-  const placeholder = document.getElementById('report-placeholder');
-  const linkStrip = document.getElementById('report-link-strip');
-  const reportStatus = document.getElementById('report-status');
-
-  // Build HTML from report via the /rca/{error_log_id}/report endpoint if we
-  // have an ID, otherwise render inline using the embedded renderer.
-  // NOTE: the endpoint is keyed on error_log_id (the seeded UUID from
-  // error_logs.id), NOT on rca_id (which is a separate UUID generated by
-  // Claude inside finish_rca).
-  const errorLogId = reportDict.error_log_id;
-
-  if (errorLogId) {
-    // Fetch the rendered HTML from the API endpoint
-    const reportUrl = `/rca/${errorLogId}/report`;
-    iframe.src = reportUrl;
-    iframe.classList.add('visible');
-    placeholder.style.display = 'none';
-    linkStrip.classList.add('visible');
-    document.getElementById('report-open-link').href = reportUrl;
-    document.getElementById('report-json-link').href = reportUrl;
-    reportStatus.textContent = `${reportDict.service_name} · ${reportDict.incident_summary?.severity?.toUpperCase() || ''}`;
-  } else {
-    // Fallback: render inline
-    iframe.srcdoc = renderReportInline(reportDict);
-    iframe.classList.add('visible');
-    placeholder.style.display = 'none';
-    reportStatus.textContent = 'Complete';
-  }
-}
-
-// Inline fallback renderer (mirrors the Python renderer logic in JS)
-function renderReportInline(r) {
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const sevColor = s => ({critical:'#dc2626',high:'#ea580c',medium:'#ca8a04',low:'#16a34a'}[s]||'#6b7280');
-  const s = r.incident_summary || {};
-  const rc = r.root_cause || {};
-  const meta = r.analysis_metadata || {};
-
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>body{margin:0;background:#0f1117;color:#e2e8f0;font-family:sans-serif;padding:20px;}
-.card{background:#1a1c2e;border:1px solid #2d3148;border-radius:10px;padding:20px;margin-bottom:16px;}
-h2{color:#a5b4fc;font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;margin:0 0 14px;
-   border-bottom:1px solid #2d3148;padding-bottom:10px;}
-pre{background:#0d0f1a;border:1px solid #2d3148;border-radius:6px;padding:12px;overflow-x:auto;
-    font-size:.8rem;color:#e2e8f0;white-space:pre-wrap;}
-.badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:.72rem;font-weight:700;
-       text-transform:uppercase;}
-p{line-height:1.6;margin:0 0 8px;color:#94a3b8;}
-</style></head><body>
-<div style="background:#1a1c2e;border:1px solid #2d3148;border-radius:10px;padding:20px;margin-bottom:20px;">
-  <div style="font-size:1.4rem;font-weight:800;color:#e2e8f0;margin-bottom:8px;">🔍 Root Cause Analysis</div>
-  <span class="badge" style="background:${sevColor(s.severity)};color:#fff">${esc(s.severity||'unknown')}</span>
-  &nbsp;<strong style="color:#a5b4fc">${esc(r.service_name)}</strong>
-  &nbsp;<span style="color:#64748b">${esc(s.environment)}</span>
-</div>
-<div class="card"><h2>📋 Incident Summary</h2>
-<p><strong>What:</strong> ${esc(s.what)}</p>
-<p><strong>When:</strong> ${esc(s.when)}</p>
-<p><strong>Impact:</strong> ${esc(s.estimated_impact||'—')}</p>
-</div>
-<div class="card"><h2>🎯 Root Cause</h2>
-<p>${esc(rc.summary)}</p>
-<p><strong>Confidence:</strong> ${esc(rc.confidence)} — ${esc(rc.confidence_reason)}</p>
-${rc.code_reference ? `<pre>${esc(rc.code_reference.file)} line ${esc(rc.code_reference.line)}</pre>` : ''}
-</div>
-<div class="card"><h2>⚙️ Metadata</h2>
-<p>Model: ${esc(meta.model)} · Iterations: ${esc(meta.react_iterations)} · Cache hits: ${(meta.cache_hits||[]).length}</p>
-</div>
-</body></html>`;
-}
-
-// ── Run RCA ────────────────────────────────────────────────────────────────────
-function setStatus(state, text) {
-  const dot = document.getElementById('status-dot');
-  dot.className = 'status-dot ' + state;
-  document.getElementById('status-text').textContent = text;
-}
-
-function startRCA() {
-  const errorLogId = document.getElementById('error-log-id').value.trim();
-  if (!errorLogId) {
-    alert('Please select a scenario first.');
+  if (!count) {
+    wrap.innerHTML = `<div style="padding:24px 18px;font-size:.78rem;color:var(--text-dim);text-align:center">No incidents.</div>`;
     return;
   }
 
-  // Reset UI
-  if (currentEventSource) {
-    currentEventSource.close();
-    currentEventSource = null;
+  const html = state.incidents.map(inc => {
+    const sevDot = inc.severity === 'critical' ? 'inbox-dot-critical' : 'inbox-dot-high';
+    const isNew = (Date.now() - new Date(inc.occurred_at).getTime()) < 5 * 60 * 1000;
+    const selectedCls = state.selectedId === inc.id ? 'selected' : '';
+    return `
+      <div class="inbox-item ${selectedCls}" data-id="${inc.id}" onclick="selectIncident('${inc.id}')">
+        <div class="inbox-dot ${sevDot}"></div>
+        <div class="inbox-body">
+          <div class="inbox-title">${escHtml(inc.error_type)}</div>
+          <div class="inbox-meta">
+            <span class="inbox-svc">${escHtml(inc.service)}</span>
+            <span>·</span>
+            <span class="inbox-ts">${relativeTime(inc.occurred_at)}</span>
+            ${isNew ? '<span class="inbox-new">NEW</span>' : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 2 grayed-out historical stubs for visual depth
+  const history = `
+    <div class="inbox-item resolved" onclick="showToast('Read-only — historical incident.', 'info')">
+      <div class="inbox-dot inbox-dot-resolved"></div>
+      <div class="inbox-body">
+        <div class="inbox-title">TimeoutException</div>
+        <div class="inbox-meta">
+          <span class="inbox-svc">notification-service</span>
+          <span>·</span><span class="inbox-ts">1d ago</span>
+          <span class="inbox-resolved-tag">RESOLVED</span>
+        </div>
+      </div>
+    </div>
+    <div class="inbox-item resolved" onclick="showToast('Read-only — historical incident.', 'info')">
+      <div class="inbox-dot inbox-dot-resolved"></div>
+      <div class="inbox-body">
+        <div class="inbox-title">ConnectionRefused</div>
+        <div class="inbox-meta">
+          <span class="inbox-svc">banking-app</span>
+          <span>·</span><span class="inbox-ts">2d ago</span>
+          <span class="inbox-resolved-tag">RESOLVED</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  wrap.innerHTML = html + history;
+}
+
+// ── Incident selection ─────────────────────────────────────────────────────────
+function selectIncident(id) {
+  if (state.running) return;
+
+  // Save outgoing scenario's UI
+  if (state.selectedId) {
+    const s = state.saved[state.selectedId] ||= freshSnapshot();
+    s.traceHtml      = document.getElementById('trace-feed').innerHTML;
+    s.reportUrl      = document.getElementById('report-iframe').src;
+    s.reportVisible  = document.getElementById('report-iframe').classList.contains('visible');
+    s.linkVisible    = document.getElementById('report-link-strip').classList.contains('visible');
+    s.openHref       = document.getElementById('report-open-link').href;
+    s.statusDot      = document.getElementById('status-dot').className;
+    s.statusText     = document.getElementById('status-text').textContent;
+    s.activeTab      = state.activeTab;
+    s.eventCount     = state.eventCount;
   }
 
-  eventCount = 0;
+  state.selectedId = id;
+  state.saved[id]  ||= freshSnapshot();
+
+  // Highlight inbox item
+  document.querySelectorAll('.inbox-item').forEach(el => el.classList.remove('selected'));
+  const el = document.querySelector(`.inbox-item[data-id="${id}"]`);
+  if (el) el.classList.add('selected');
+
+  // Show detail
+  document.getElementById('detail-empty').style.display = 'none';
+  document.getElementById('detail-content').style.display = 'flex';
+
+  // Populate incident header
+  const inc = state.incidents.find(i => i.id === id);
+  if (inc) {
+    document.getElementById('incident-title').textContent = inc.error_type;
+    const sevEl = document.getElementById('incident-sev');
+    sevEl.textContent = inc.severity;
+    sevEl.className = 'incident-sev sev-' + inc.severity;
+    document.getElementById('incident-meta').innerHTML =
+      `<code>${escHtml(inc.service)}</code> · ${escHtml(inc.environment)} · ${relativeTime(inc.occurred_at)}`;
+    document.getElementById('incident-error').textContent = inc.error_message;
+  }
+
+  // Restore saved state for incoming incident
+  const s = state.saved[id];
+  state.activeTab  = s.activeTab;
+  state.eventCount = s.eventCount;
+
+  // Trace
+  const feed = document.getElementById('trace-feed');
+  if (s.traceHtml !== null) {
+    feed.innerHTML = s.traceHtml;
+    feed.scrollTop = feed.scrollHeight;
+  } else {
+    feed.innerHTML = `<div class="trace-empty"><div class="hint">🤖</div>
+      <p>Click <strong style="color:var(--accent-light)">▶ Investigate</strong> to watch the agent reason in real time.</p></div>`;
+  }
+
+  // Status
+  document.getElementById('status-dot').className = s.statusDot || 'status-dot';
+  document.getElementById('status-text').textContent = s.statusText;
+
+  // Report
+  const iframe = document.getElementById('report-iframe');
+  const placeholder = document.getElementById('report-placeholder');
+  const linkStrip = document.getElementById('report-link-strip');
+  if (s.reportVisible && s.reportUrl) {
+    iframe.src = s.reportUrl;
+    iframe.classList.add('visible');
+    placeholder.style.display = 'none';
+    linkStrip.classList.add('visible');
+    document.getElementById('report-open-link').href = s.openHref || '#';
+  } else {
+    iframe.className = 'report-iframe';
+    iframe.src = '';
+    placeholder.style.display = '';
+    linkStrip.className = 'report-link-strip';
+  }
+
+  // PR panel
+  renderPRPanel(s);
+
+  // Tab
+  switchTabRaw(s.activeTab);
+
+  // Reset Investigate button
+  const btn = document.getElementById('btn-investigate');
+  btn.disabled = false;
+  btn.textContent = state.mode === 'edit' ? '▶ Investigate & Draft PR' : '▶ Investigate with Claude';
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  if (name === 'pr' && document.getElementById('tab-pr').classList.contains('disabled')) return;
+  switchTabRaw(name);
+  if (state.selectedId) state.saved[state.selectedId].activeTab = name;
+}
+function switchTabRaw(name) {
+  state.activeTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ── Run RCA ────────────────────────────────────────────────────────────────────
+function setStatus(dotState, text) {
+  document.getElementById('status-dot').className = 'status-dot ' + dotState;
+  document.getElementById('status-text').textContent = text;
+}
+
+function resetRcaUI() {
+  state.eventCount = 0;
+  // Clear saved state for the current incident — we're starting fresh
+  if (state.selectedId) {
+    state.saved[state.selectedId] = freshSnapshot();
+    state.saved[state.selectedId].statusDot  = 'status-dot running';
+    state.saved[state.selectedId].statusText = 'Running…';
+  }
   document.getElementById('trace-feed').innerHTML = '';
   document.getElementById('report-iframe').className = 'report-iframe';
   document.getElementById('report-iframe').src = '';
   document.getElementById('report-placeholder').style.display = '';
   document.getElementById('report-link-strip').className = 'report-link-strip';
-  document.getElementById('report-status').textContent = 'Waiting for analysis…';
+  // Reset PR tab
+  document.getElementById('tab-pr').classList.add('disabled');
+  document.getElementById('tab-pr-indicator').innerHTML = '';
+  renderPRPanel(state.saved[state.selectedId]);
+  switchTabRaw('thinking');
+}
 
-  const btn = document.getElementById('run-btn');
+async function startRCA() {
+  if (state.running || !state.selectedId) return;
+
+  resetRcaUI();
+  state.running = true;
+
+  const btn = document.getElementById('btn-investigate');
   btn.disabled = true;
   btn.textContent = '⏳ Analyzing…';
-  setStatus('running', 'Connecting to agent…');
+  document.getElementById('mode-ask').classList.add('disabled');
+  document.getElementById('mode-edit').classList.add('disabled');
 
-  // POST to /rca/run/stream and stream SSE
-  fetch('/rca/run/stream', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ error_log_id: errorLogId }),
-  }).then(response => {
-    if (!response.ok) {
-      return response.text().then(t => { throw new Error(t); });
-    }
+  setStatus('running', 'Connecting…');
+  switchTabRaw('thinking');
+
+  try {
+    const response = await fetch('/rca/run/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error_log_id: state.selectedId }),
+    });
+    if (!response.ok) throw new Error(await response.text());
 
     setStatus('running', 'Agent running…');
     const reader = response.body.getReader();
@@ -735,80 +1046,328 @@ function startRCA() {
 
     function pump() {
       reader.read().then(({ done, value }) => {
-        if (done) {
-          onStreamEnd();
-          return;
-        }
+        if (done) { onStreamEnd(); return; }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop(); // keep incomplete line
-
+        buffer = lines.pop();
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            try {
-              const ev = JSON.parse(line.slice(6));
-              handleEvent(ev);
-            } catch (e) {
-              console.warn('Parse error:', e, line);
-            }
+            try { handleEvent(JSON.parse(line.slice(6))); }
+            catch (e) { console.warn('SSE parse error', e, line); }
           }
         }
         pump();
-      }).catch(err => {
-        onStreamError(err.message);
-      });
+      }).catch(err => onStreamError(err.message));
     }
     pump();
-  }).catch(err => {
+  } catch (err) {
     onStreamError(err.message);
-  });
+  }
 }
 
 function handleEvent(ev) {
   if (ev.type === 'done') {
     appendEvent(ev);
     setStatus('done', 'Analysis complete');
-    onDone(ev.report);
+    if (ev.report) showReport(ev.report);
+    finishRun();
+    // Edit mode: kick off PR creation in the background
+    if (state.mode === 'edit') {
+      createPR(state.selectedId);
+    }
   } else if (ev.type === 'error') {
     appendEvent(ev);
     setStatus('error', 'Error: ' + (ev.message || 'unknown'));
-    resetBtn();
+    finishRun();
   } else {
     appendEvent(ev);
-    if (ev.type === 'start') {
-      setStatus('running', `Analyzing ${ev.service}…`);
-    } else if (ev.type === 'complete') {
-      setStatus('running', `Wrapping up…`);
-    }
+    if (ev.type === 'start') setStatus('running', `Analyzing ${ev.service}…`);
   }
 }
 
-function onDone(report) {
-  if (report) {
-    showReport(report);
+function finishRun() {
+  state.running = false;
+  const btn = document.getElementById('btn-investigate');
+  btn.disabled = false;
+  btn.textContent = state.mode === 'edit' ? '▶ Investigate & Draft PR' : '▶ Investigate with Claude';
+  document.getElementById('mode-ask').classList.remove('disabled');
+  document.getElementById('mode-edit').classList.remove('disabled');
+  // Persist status into saved snapshot
+  if (state.selectedId) {
+    const s = state.saved[state.selectedId];
+    s.statusDot  = document.getElementById('status-dot').className;
+    s.statusText = document.getElementById('status-text').textContent;
   }
-  resetBtn();
 }
-
-function onStreamEnd() {
-  setStatus('done', 'Stream closed');
-  resetBtn();
-}
-
+function onStreamEnd() { setStatus('done', 'Stream closed'); finishRun(); }
 function onStreamError(msg) {
   appendEvent({ type: 'error', message: msg, ts: new Date().toISOString() });
   setStatus('error', 'Stream error');
-  resetBtn();
+  finishRun();
 }
 
-function resetBtn() {
-  const btn = document.getElementById('run-btn');
-  btn.disabled = false;
-  btn.textContent = '🚀 Run RCA';
+// ── Report ─────────────────────────────────────────────────────────────────────
+function showReport(reportDict) {
+  const iframe = document.getElementById('report-iframe');
+  const placeholder = document.getElementById('report-placeholder');
+  const linkStrip = document.getElementById('report-link-strip');
+  const errorLogId = reportDict.error_log_id || state.selectedId;
+  if (!errorLogId) return;
+  const reportUrl = `/rca/${errorLogId}/report`;
+  iframe.src = reportUrl;
+  iframe.classList.add('visible');
+  placeholder.style.display = 'none';
+  linkStrip.classList.add('visible');
+  document.getElementById('report-open-link').href = reportUrl;
+  // Save into snapshot
+  if (state.selectedId) {
+    const s = state.saved[state.selectedId];
+    s.reportVisible = true;
+    s.reportUrl     = reportUrl;
+    s.linkVisible   = true;
+    s.openHref      = reportUrl;
+  }
+  switchTab('report');
+}
+
+// ── PR creation (Edit mode) ────────────────────────────────────────────────────
+async function createPR(incidentId) {
+  if (state.prCreating) return;
+  state.prCreating = true;
+
+  // Enable PR tab in "drafting" state
+  const prTab = document.getElementById('tab-pr');
+  const indicator = document.getElementById('tab-pr-indicator');
+  prTab.classList.remove('disabled');
+  indicator.innerHTML = '<span class="tab-spin"></span>';
+
+  // Show "drafting" state in PR panel
+  document.getElementById('pr-panel').innerHTML = `
+    <div class="detail-empty">
+      <div class="big-icon">🛠️</div>
+      <p style="font-size:.88rem;text-align:center;max-width:340px">
+        Drafting the fix and opening a Pull Request on GitHub…
+      </p>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`/rca/${incidentId}/create_pr`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || `HTTP ${res.status}`);
+    }
+    // Save and render
+    if (state.saved[incidentId]) {
+      state.saved[incidentId].pr = data;
+      state.saved[incidentId].prError = null;
+    }
+    renderPRPanel(state.saved[incidentId]);
+    indicator.innerHTML = '<span class="tab-check">✓</span>';
+    showToast(`PR drafted on ${data.branch}`, 'success');
+  } catch (err) {
+    console.error('PR creation failed', err);
+    if (state.saved[incidentId]) {
+      state.saved[incidentId].pr = null;
+      state.saved[incidentId].prError = String(err.message || err);
+    }
+    renderPRPanel(state.saved[incidentId]);
+    indicator.innerHTML = '<span style="color:var(--red);font-size:.8rem">!</span>';
+    showToast('PR could not be created', 'error');
+  } finally {
+    state.prCreating = false;
+  }
+}
+
+function renderPRPanel(snapshot) {
+  const panel = document.getElementById('pr-panel');
+  if (!snapshot) {
+    panel.innerHTML = '';
+    return;
+  }
+  if (snapshot.pr) {
+    const pr = snapshot.pr;
+    const files = (pr.files_changed || []).map(f => `<code>${escHtml(f)}</code>`).join('<br>');
+    panel.innerHTML = `
+      <div class="pr-card">
+        <div class="pr-card-header">
+          <div class="pr-card-title-line">
+            <span class="pr-status-pill">${pr.existing ? 'Updated' : 'Open'}</span>
+            <span class="pr-card-title">${escHtml(pr.title)}</span>
+          </div>
+          <span class="pr-card-branch">${escHtml(pr.branch)}</span>
+        </div>
+        <div class="pr-card-meta">
+          <div>
+            <div class="pr-meta-label">PR #</div>
+            <div class="pr-meta-val">#${escHtml(pr.pr_number)}</div>
+          </div>
+          <div>
+            <div class="pr-meta-label">Files changed</div>
+            <div class="pr-meta-val">${files || '<em style="color:var(--text-dim)">none</em>'}</div>
+          </div>
+        </div>
+        <div class="pr-card-diff">${pr.diff_html || '<span class="diff-ctx">(no diff)</span>'}</div>
+        <div class="pr-card-actions">
+          <a class="btn-view-pr" href="${escHtml(pr.pr_url)}" target="_blank">View Pull Request →</a>
+        </div>
+      </div>
+    `;
+    // Restore PR tab indicator
+    document.getElementById('tab-pr').classList.remove('disabled');
+    document.getElementById('tab-pr-indicator').innerHTML = '<span class="tab-check">✓</span>';
+    return;
+  }
+  if (snapshot.prError) {
+    panel.innerHTML = `
+      <div class="pr-error-card">
+        <div class="pr-error-title">⚠ Pull Request could not be created</div>
+        <div class="pr-error-detail">${escHtml(snapshot.prError)}</div>
+        <div style="margin-top:12px;font-size:.78rem;color:var(--text-muted);font-family:-apple-system,sans-serif">
+          The RCA report above is still valid — only the automated PR draft failed.
+          Most often this means <code style="color:var(--accent-light)">GITHUB_PAT</code>
+          lacks <code style="color:var(--accent-light)">repo</code> write scope on the target repo.
+        </div>
+      </div>
+    `;
+    document.getElementById('tab-pr').classList.remove('disabled');
+    document.getElementById('tab-pr-indicator').innerHTML = '<span style="color:var(--red);font-size:.8rem">!</span>';
+    return;
+  }
+  // Default empty
+  panel.innerHTML = `
+    <div class="detail-empty">
+      <div class="big-icon">🔧</div>
+      <p style="font-size:.88rem;text-align:center;max-width:320px">
+        Switch to <strong style="color:var(--accent-light)">Edit</strong> mode in the nav and run an investigation to generate a Pull Request.
+      </p>
+    </div>
+  `;
+  document.getElementById('tab-pr').classList.add('disabled');
+  document.getElementById('tab-pr-indicator').innerHTML = '';
+}
+
+// ── Trace event rendering (preserved from v1) ──────────────────────────────────
+const EVENT_CONFIG = {
+  start:       { icon: '🚀', cls: 'col-blue',          evCls: 'ev-start' },
+  tool_call:   { icon: '🔧', cls: 'col-purple',         evCls: 'ev-tool_call' },
+  tool_result: { icon: '✅', cls: 'col-green',          evCls: 'ev-tool_result' },
+  cache_hit:   { icon: '⚡', cls: 'col-yellow',         evCls: 'ev-cache_hit' },
+  reasoning:   { icon: '💭', cls: 'col-gray',           evCls: 'ev-reasoning' },
+  sub_agent:   { icon: '🤖', cls: 'col-orange',         evCls: 'ev-sub_agent' },
+  complete:    { icon: '🎯', cls: 'col-green fw-bold',  evCls: 'ev-complete' },
+  done:        { icon: '🎉', cls: 'col-green fw-bold',  evCls: 'ev-done' },
+  error:       { icon: '❌', cls: 'col-red',            evCls: 'ev-error' },
+};
+
+function formatTs(isoStr) {
+  try { return new Date(isoStr).toTimeString().slice(0, 8); }
+  catch { return '--:--:--'; }
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildEventText(ev) {
+  switch (ev.type) {
+    case 'start':
+      return `Starting RCA for <strong>${escHtml(ev.service)}</strong> `
+           + `(<span style="color:var(--red)">${escHtml(ev.error_type)}</span>)`;
+    case 'tool_call': {
+      const inp = ev.input || {};
+      let detail = '';
+      if (inp.path)        detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.path)}</code>`;
+      if (inp.query)       detail = ` · "${escHtml(inp.query)}"`;
+      if (inp.commit_sha)  detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.commit_sha.slice(0,8))}</code>`;
+      if (inp.service_name) detail = ` · ${escHtml(inp.service_name)}`;
+      return `Calling <strong style="color:var(--purple)">${escHtml(ev.tool)}</strong>${detail}`;
+    }
+    case 'tool_result':
+      return escHtml(ev.summary || `${ev.tool} returned`);
+    case 'cache_hit':
+      return `Cache hit: <code style="color:var(--yellow)">${escHtml(ev.key)}</code>`;
+    case 'reasoning': {
+      const full = ev.text || '';
+      const truncLen = 220;
+      if (full.length <= truncLen)
+        return `<span class="trace-reasoning">"${escHtml(full)}"</span>`;
+      const uid = 'r' + Date.now() + Math.random().toString(36).slice(2,6);
+      return `<span class="trace-reasoning">"${escHtml(full.slice(0, truncLen))}<span id="${uid}-rest" style="display:none">${escHtml(full.slice(truncLen))}</span>…`
+           + `<span class="expand-btn" onclick="expandReasoning('${uid}')">show more</span>"</span>`;
+    }
+    case 'sub_agent':
+      return `Launching sub-agent: <em>${escHtml(ev.action)}</em>`;
+    case 'complete':
+      return `<strong>RCA complete</strong> — confidence: `
+           + `<strong style="color:var(--green)">${escHtml((ev.confidence||'').toUpperCase())}</strong> `
+           + `(${ev.iterations} iterations)`;
+    case 'done':
+      return `<strong>Analysis finished</strong> — switching to report →`;
+    case 'error':
+      return `<strong>Error:</strong> ${escHtml(ev.message || 'unknown')}`;
+    default:
+      return escHtml(JSON.stringify(ev));
+  }
+}
+
+function expandReasoning(uid) {
+  const rest = document.getElementById(uid + '-rest');
+  const btn = rest && rest.parentElement && rest.parentElement.querySelector('.expand-btn');
+  if (rest) rest.style.display = 'inline';
+  if (btn)  btn.style.display  = 'none';
+}
+
+function appendEvent(ev) {
+  const feed = document.getElementById('trace-feed');
+  if (state.eventCount === 0) feed.innerHTML = '';
+  state.eventCount++;
+  const cfg = EVENT_CONFIG[ev.type] || { icon: '•', cls: 'col-gray', evCls: '' };
+  const div = document.createElement('div');
+  div.className = `trace-event ${cfg.evCls}`;
+  div.innerHTML = `
+    <span class="trace-ts">${formatTs(ev.ts)}</span>
+    <span class="trace-icon">${cfg.icon}</span>
+    <span class="trace-text ${cfg.cls}">${buildEventText(ev)}</span>
+  `;
+  feed.appendChild(div);
+  feed.scrollTop = feed.scrollHeight;
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
-loadScenarios();
+async function init() {
+  // Health check
+  try {
+    const h = await fetch('/health').then(r => r.json());
+    document.getElementById('nav-model').textContent = h.model || 'unknown';
+    document.getElementById('health-dot').className = 'health-dot ok';
+    document.getElementById('health-text').textContent = 'Connected';
+  } catch {
+    document.getElementById('health-dot').className = 'health-dot err';
+    document.getElementById('health-text').textContent = 'Offline';
+    document.getElementById('nav-model').textContent = 'error';
+  }
+
+  // Seed + populate inbox
+  try {
+    const res = await fetch('/demo/seed', { method: 'POST' });
+    const data = await res.json();
+    state.incidents = (data.incidents || []).sort(
+      (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at)
+    );
+    renderInbox();
+    if (state.incidents.length) selectIncident(state.incidents[0].id);
+  } catch (err) {
+    document.getElementById('inbox-items').innerHTML =
+      `<div style="padding:24px 18px;font-size:.78rem;color:var(--red);text-align:center">
+        Failed to load incidents.<br>${escHtml(err.message)}
+      </div>`;
+  }
+}
+
+init();
 </script>
 </body>
 </html>
