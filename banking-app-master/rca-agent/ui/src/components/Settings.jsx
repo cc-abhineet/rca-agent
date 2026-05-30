@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { fetchSettings, saveSettings } from '../api/client'
+import { fetchSettings, saveSettings, testCredential } from '../api/client'
 import { useApp } from '../context/AppContext'
 
 const MODELS = [
-  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (Recommended)' },
   { value: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6' },
   { value: 'claude-opus-4-8',           label: 'Claude Opus 4.8' },
 ]
@@ -16,18 +16,75 @@ const DD_SITES = [
 ]
 
 const SECTIONS = [
-  { id: 'claude',        label: 'Claude AI',    icon: '🤖' },
-  { id: 'github',        label: 'GitHub',       icon: '⎇' },
-  { id: 'datadog',       label: 'Datadog',      icon: '📊' },
-  { id: 'observability', label: 'Observability',icon: '👁' },
-  { id: 'database',      label: 'Database',     icon: '🗄' },
+  { id: 'claude',        label: 'Claude AI',     icon: '⚡' },
+  { id: 'github',        label: 'GitHub',        icon: '⎇'  },
+  { id: 'datadog',       label: 'Datadog',       icon: '📊' },
+  { id: 'observability', label: 'Observability', icon: '👁'  },
+  { id: 'database',      label: 'Database',      icon: '🗄'  },
 ]
 
-function MaskedInput({ label, name, value, onChange, help }) {
+// ── Badge showing whether a change needs restart ──────────────────────────────
+
+function LiveBadge() {
+  return (
+    <span className="settings-badge settings-badge-live" title="Takes effect immediately after saving">
+      ⚡ Instant
+    </span>
+  )
+}
+
+function RestartBadge() {
+  return (
+    <span className="settings-badge settings-badge-restart" title="Container restart required for this setting to take effect">
+      ↺ Restart required
+    </span>
+  )
+}
+
+// ── Test result banner ────────────────────────────────────────────────────────
+
+function TestResult({ result }) {
+  if (!result) return null
+  return (
+    <div className={`cred-test-result ${result.valid ? 'cred-ok' : 'cred-fail'}`}>
+      <span className="cred-test-icon">{result.valid ? '✓' : '✕'}</span>
+      {result.message}
+    </div>
+  )
+}
+
+function useTest(keyType) {
+  const [testing, setTesting]   = useState(false)
+  const [result,  setResult]    = useState(null)
+
+  const run = useCallback(async (payload = {}) => {
+    setTesting(true)
+    setResult(null)
+    try {
+      const r = await testCredential({ key_type: keyType, ...payload })
+      setResult(r)
+    } catch (e) {
+      setResult({ valid: false, message: e.message })
+    } finally {
+      setTesting(false)
+    }
+  }, [keyType])
+
+  return { testing, result, run, setResult }
+}
+
+// ── Masked secret input ───────────────────────────────────────────────────────
+
+function MaskedInput({ label, name, value, onChange, help, badge }) {
   const [show, setShow] = useState(false)
   return (
     <div className="form-group">
-      {label && <label className="form-label">{label}</label>}
+      {label && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <label className="form-label" style={{ margin: 0 }}>{label}</label>
+          {badge}
+        </div>
+      )}
       <div className="input-wrap">
         <input
           type={show ? 'text' : 'password'}
@@ -35,7 +92,7 @@ function MaskedInput({ label, name, value, onChange, help }) {
           name={name}
           value={value || ''}
           onChange={onChange}
-          placeholder="Leave blank to keep current"
+          placeholder="Leave blank to keep current value"
           autoComplete="off"
         />
         <button type="button" className="input-btn" onClick={() => setShow(s => !s)}>
@@ -56,38 +113,85 @@ function MaskedInput({ label, name, value, onChange, help }) {
   )
 }
 
+function FormField({ label, badge, help, children }) {
+  return (
+    <div className="form-group">
+      {label && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <label className="form-label" style={{ margin: 0 }}>{label}</label>
+          {badge}
+        </div>
+      )}
+      {children}
+      {help && <span className="form-help">{help}</span>}
+    </div>
+  )
+}
+
+// ── Save / Reset actions ──────────────────────────────────────────────────────
+
+function SettingsActions({ onSave, onReset, saving, onTest, testing, testResult }) {
+  return (
+    <div className="settings-actions-wrap">
+      {testResult && <TestResult result={testResult} />}
+      <div className="settings-actions">
+        {onTest && (
+          <button className="btn btn-test" onClick={onTest} disabled={testing || saving}>
+            {testing ? (
+              <><span className="anim-spin" style={{ display: 'inline-block', width: 11, height: 11, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'currentColor', borderRadius: '50%' }} /> Testing…</>
+            ) : '⚡ Test Credentials'}
+          </button>
+        )}
+        <button className="btn btn-primary" onClick={onSave} disabled={saving}>
+          {saving ? (
+            <><span className="anim-spin" style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%' }} /> Saving...</>
+          ) : 'Save Changes'}
+        </button>
+        <button className="btn btn-secondary" onClick={onReset}>Reset to Env Defaults</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function Settings() {
   const { showToast } = useApp()
   const [activeSection, setActiveSection] = useState('claude')
+
+  const claudeTest  = useTest('anthropic')
+  const githubTest  = useTest('github')
+  const datadogTest = useTest('datadog')
+
   const [form, setForm] = useState({
-    anthropic_api_key: '',
-    github_pat: '',
-    github_org: '',
-    model: 'claude-sonnet-4-6',
-    max_react_iterations: 20,
-    dd_api_key: '',
-    dd_app_key: '',
-    dd_site: 'us5.datadoghq.com',
-    observability_adapter: 'local',
-    cicd_adapter: 'mock',
-    database_url: '',
+    anthropic_api_key:    '',
+    github_pat:           '',
+    github_org:           '',
+    model:                'claude-haiku-4-5-20251001',
+    max_react_iterations: 8,
+    dd_api_key:           '',
+    dd_app_key:           '',
+    dd_site:              'us5.datadoghq.com',
+    observability_adapter:'local',
+    cicd_adapter:         'mock',
+    database_url:         '',
   })
   const [displayed, setDisplayed] = useState({})
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]   = useState(false)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
-    fetchSettings()
+    return fetchSettings()
       .then(s => {
         setDisplayed(s)
         setForm(prev => ({
           ...prev,
-          github_org:            s.github_org            || prev.github_org,
-          model:                 s.model                 || prev.model,
-          max_react_iterations:  s.max_react_iterations  || prev.max_react_iterations,
-          dd_site:               s.dd_site               || prev.dd_site,
-          observability_adapter: s.observability_adapter || prev.observability_adapter,
-          cicd_adapter:          s.cicd_adapter          || prev.cicd_adapter,
+          github_org:            s.github_org            ?? prev.github_org,
+          model:                 s.model                 ?? prev.model,
+          max_react_iterations:  s.max_react_iterations  ?? prev.max_react_iterations,
+          dd_site:               s.dd_site               ?? prev.dd_site,
+          observability_adapter: s.observability_adapter ?? prev.observability_adapter,
+          cicd_adapter:          s.cicd_adapter          ?? prev.cicd_adapter,
         }))
         setLoading(false)
       })
@@ -101,21 +205,17 @@ export default function Settings() {
     setForm(f => ({ ...f, [name]: value }))
   }
 
-  const handleSlider = (e) => {
-    setForm(f => ({ ...f, max_react_iterations: Number(e.target.value) }))
-  }
-
   const handleSave = async () => {
     setSaving(true)
-    // Only send fields that have actual values (don't send empty masked-input placeholders)
+    // Only send fields that have actual values
     const payload = {}
     Object.entries(form).forEach(([k, v]) => {
       if (v !== '' && v !== null && v !== undefined) payload[k] = v
     })
     try {
       await saveSettings(payload)
-      showToast('Settings saved successfully', 'success')
-      load()
+      showToast('Settings saved — changes take effect on next RCA run', 'success')
+      await load()   // await so re-render uses server values, not stale form state
     } catch (e) {
       showToast(`Save failed: ${e.message}`, 'error')
     } finally {
@@ -127,12 +227,12 @@ export default function Settings() {
     setForm(prev => ({
       ...prev,
       anthropic_api_key: '',
-      github_pat: '',
-      dd_api_key: '',
-      dd_app_key: '',
+      github_pat:        '',
+      dd_api_key:        '',
+      dd_app_key:        '',
     }))
     load()
-    showToast('Reset to environment defaults', 'info')
+    showToast('Reset — will use environment variable defaults', 'info')
   }
 
   if (loading) {
@@ -171,11 +271,12 @@ export default function Settings() {
 
       {/* Section content */}
       <div className="settings-content">
+
+        {/* ── Claude AI ─────────────────────────────────────────────────────── */}
         {activeSection === 'claude' && (
           <div className="glass settings-section">
-            <h3 className="settings-section-title">
-              <span>🤖</span> Claude AI Settings
-            </h3>
+            <h3 className="settings-section-title"><span>⚡</span> Claude AI Settings</h3>
+
             <div className="settings-fields">
               <div className="settings-field-full">
                 <MaskedInput
@@ -183,51 +284,49 @@ export default function Settings() {
                   name="anthropic_api_key"
                   value={form.anthropic_api_key}
                   onChange={handleChange}
-                  help={displayed.anthropic_api_key ? `Current: ${displayed.anthropic_api_key}` : 'Required for RCA analysis'}
+                  badge={<LiveBadge />}
+                  help={displayed.anthropic_api_key
+                    ? `Current: ${displayed.anthropic_api_key}`
+                    : 'Required — from console.anthropic.com'}
                 />
               </div>
-              <div className="form-group">
-                <label className="form-label">Model</label>
-                <select
-                  className="form-select"
-                  name="model"
-                  value={form.model}
-                  onChange={handleChange}
-                >
-                  {MODELS.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
+
+              <FormField label="Model" badge={<LiveBadge />} help="Used on every RCA run — switch without restarting">
+                <select className="form-select" name="model" value={form.model} onChange={handleChange}>
+                  {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">
-                  Max Iterations &nbsp;
-                  <span className="slider-value">{form.max_react_iterations}</span>
-                </label>
+              </FormField>
+
+              <FormField
+                label={<>Max ReAct Iterations &nbsp;<span className="slider-value">{form.max_react_iterations}</span></>}
+                badge={<LiveBadge />}
+                help="Higher = more thorough but uses more tokens"
+              >
                 <input
-                  type="range"
-                  className="form-range"
-                  min="5"
-                  max="30"
-                  step="1"
+                  type="range" className="form-range"
+                  min="3" max="20" step="1"
                   value={form.max_react_iterations}
-                  onChange={handleSlider}
+                  onChange={e => setForm(f => ({ ...f, max_react_iterations: Number(e.target.value) }))}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
-                  <span>5 (Fast)</span>
-                  <span>30 (Thorough)</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  <span>3 (Fast)</span><span>20 (Thorough)</span>
                 </div>
-              </div>
+              </FormField>
             </div>
-            <SettingsActions onSave={handleSave} onReset={handleReset} saving={saving} />
+
+            <SettingsActions
+              onSave={handleSave} onReset={handleReset} saving={saving}
+              onTest={() => claudeTest.run({ api_key: form.anthropic_api_key || undefined })}
+              testing={claudeTest.testing} testResult={claudeTest.result}
+            />
           </div>
         )}
 
+        {/* ── GitHub ────────────────────────────────────────────────────────── */}
         {activeSection === 'github' && (
           <div className="glass settings-section">
-            <h3 className="settings-section-title">
-              <span>⎇</span> GitHub Settings
-            </h3>
+            <h3 className="settings-section-title"><span>⎇</span> GitHub Settings</h3>
+
             <div className="settings-fields">
               <div className="settings-field-full">
                 <MaskedInput
@@ -235,76 +334,95 @@ export default function Settings() {
                   name="github_pat"
                   value={form.github_pat}
                   onChange={handleChange}
-                  help={displayed.github_pat ? `Current: ${displayed.github_pat}` : 'Required for repo analysis'}
+                  badge={<LiveBadge />}
+                  help={displayed.github_pat
+                    ? `Current: ${displayed.github_pat}`
+                    : 'Required for repo analysis — needs repo:read scope'}
                 />
               </div>
-              <div className="form-group">
-                <label className="form-label">Organization / User</label>
+
+              <FormField label="Organization / User" badge={<LiveBadge />} help="GitHub org or user to search repos in (e.g. oscorpAI)">
                 <input
-                  type="text"
-                  className="form-input"
-                  name="github_org"
-                  value={form.github_org}
-                  onChange={handleChange}
-                  placeholder="e.g. oscorpAI"
+                  type="text" className="form-input"
+                  name="github_org" value={form.github_org}
+                  onChange={handleChange} placeholder="e.g. oscorpAI"
                 />
-                <span className="form-help">GitHub org or user to search repos in</span>
-              </div>
+              </FormField>
             </div>
-            <SettingsActions onSave={handleSave} onReset={handleReset} saving={saving} />
+
+            <SettingsActions
+              onSave={handleSave} onReset={handleReset} saving={saving}
+              onTest={() => githubTest.run({ api_key: form.github_pat || undefined })}
+              testing={githubTest.testing} testResult={githubTest.result}
+            />
           </div>
         )}
 
+        {/* ── Datadog ───────────────────────────────────────────────────────── */}
         {activeSection === 'datadog' && (
           <div className="glass settings-section">
-            <h3 className="settings-section-title">
-              <span>📊</span> Datadog Settings
-            </h3>
+            <h3 className="settings-section-title"><span>📊</span> Datadog Settings</h3>
+            <p className="settings-section-desc">
+              Changes apply instantly to the <strong>Log Explorer</strong> Datadog view.
+              The ingestion agent poller uses the keys set in environment variables — restart it to pick up new keys there.
+            </p>
+
             <div className="settings-fields">
               <div className="settings-field-full">
                 <MaskedInput
-                  label="DD API Key"
+                  label="API Key"
                   name="dd_api_key"
                   value={form.dd_api_key}
                   onChange={handleChange}
+                  badge={<LiveBadge />}
                   help={displayed.dd_api_key ? `Current: ${displayed.dd_api_key}` : 'From Datadog org settings'}
                 />
               </div>
               <div className="settings-field-full">
                 <MaskedInput
-                  label="DD Application Key"
+                  label="Application Key"
                   name="dd_app_key"
                   value={form.dd_app_key}
                   onChange={handleChange}
+                  badge={<LiveBadge />}
                   help={displayed.dd_app_key ? `Current: ${displayed.dd_app_key}` : 'From Datadog application keys'}
                 />
               </div>
-              <div className="form-group">
-                <label className="form-label">Site</label>
-                <select
-                  className="form-select"
-                  name="dd_site"
-                  value={form.dd_site}
-                  onChange={handleChange}
-                >
-                  {DD_SITES.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+
+              <FormField label="Site" badge={<LiveBadge />}>
+                <select className="form-select" name="dd_site" value={form.dd_site} onChange={handleChange}>
+                  {DD_SITES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
-              </div>
+              </FormField>
             </div>
-            <SettingsActions onSave={handleSave} onReset={handleReset} saving={saving} />
+
+            <SettingsActions
+              onSave={handleSave} onReset={handleReset} saving={saving}
+              onTest={() => datadogTest.run({
+                api_key: form.dd_api_key || undefined,
+                app_key: form.dd_app_key || undefined,
+              })}
+              testing={datadogTest.testing} testResult={datadogTest.result}
+            />
           </div>
         )}
 
+        {/* ── Observability / CI-CD ─────────────────────────────────────────── */}
         {activeSection === 'observability' && (
           <div className="glass settings-section">
-            <h3 className="settings-section-title">
-              <span>👁</span> Observability &amp; CI/CD
-            </h3>
+            <h3 className="settings-section-title"><span>👁</span> Observability &amp; CI/CD</h3>
+            <div className="settings-restart-notice">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              These adapters are wired at container startup. Save your choice here, then restart the
+              <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>rca-agent</code>
+              container to apply.
+            </div>
+
             <div className="settings-fields">
-              <div className="form-group">
-                <label className="form-label">Observability Adapter</label>
+              <FormField label="Observability Adapter" badge={<RestartBadge />}
+                help={`Active: ${displayed.observability_adapter || 'local'}`}>
                 <div className="toggle-group">
                   {['local', 'datadog'].map(v => (
                     <button
@@ -316,12 +434,10 @@ export default function Settings() {
                     </button>
                   ))}
                 </div>
-                <span className="form-help" style={{ marginTop: 6 }}>
-                  Current: <strong style={{ color: 'var(--text-secondary)' }}>{displayed.observability_adapter}</strong>
-                </span>
-              </div>
-              <div className="form-group">
-                <label className="form-label">CI/CD Adapter</label>
+              </FormField>
+
+              <FormField label="CI/CD Adapter" badge={<RestartBadge />}
+                help={`Active: ${displayed.cicd_adapter || 'mock'}`}>
                 <div className="toggle-group">
                   {['mock', 'real'].map(v => (
                     <button
@@ -333,64 +449,37 @@ export default function Settings() {
                     </button>
                   ))}
                 </div>
-                <span className="form-help" style={{ marginTop: 6 }}>
-                  Current: <strong style={{ color: 'var(--text-secondary)' }}>{displayed.cicd_adapter}</strong>
-                </span>
-              </div>
+              </FormField>
             </div>
+
             <SettingsActions onSave={handleSave} onReset={handleReset} saving={saving} />
           </div>
         )}
 
+        {/* ── Database ──────────────────────────────────────────────────────── */}
         {activeSection === 'database' && (
           <div className="glass settings-section">
-            <h3 className="settings-section-title">
-              <span>🗄</span> Database
-            </h3>
+            <h3 className="settings-section-title"><span>🗄</span> Database</h3>
+
             <div className="settings-fields">
               <div className="settings-field-full">
-                <div className="form-group">
-                  <label className="form-label">Connection String</label>
+                <FormField label="Connection URL" badge={<LiveBadge />}
+                  help={<>Current (masked): <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{displayed.database_url}</code></>}>
                   <input
-                    type="text"
-                    className="form-input mono"
+                    type="text" className="form-input mono"
                     name="database_url"
-                    value={form.database_url || displayed.database_url || ''}
+                    value={form.database_url || ''}
                     onChange={handleChange}
-                    placeholder="mysql+pymysql://user:pass@host:3306/db"
+                    placeholder="mysql+pymysql://user:pass@host:3306/rca_db"
                   />
-                  <span className="form-help">
-                    Current (masked): <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{displayed.database_url}</code>
-                  </span>
-                </div>
+                </FormField>
               </div>
             </div>
+
             <SettingsActions onSave={handleSave} onReset={handleReset} saving={saving} />
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-function SettingsActions({ onSave, onReset, saving }) {
-  return (
-    <div className="settings-actions">
-      <button
-        className="btn btn-primary"
-        onClick={onSave}
-        disabled={saving}
-      >
-        {saving ? (
-          <>
-            <span className="anim-spin" style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%' }} />
-            Saving...
-          </>
-        ) : 'Save Changes'}
-      </button>
-      <button className="btn btn-secondary" onClick={onReset}>
-        Reset to Defaults
-      </button>
     </div>
   )
 }

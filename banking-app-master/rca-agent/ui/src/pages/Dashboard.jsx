@@ -39,20 +39,20 @@ function MonitoringControl() {
     <div className="monitoring-control">
       {/* Source toggle — disabled while monitoring is active */}
       <div
-        className={`toggle-group source-toggle${monitoringActive ? ' toggle-disabled' : ''}`}
-        title={monitoringActive ? 'Stop monitoring to switch source' : 'Select log source'}
+        className={`toggle-group source-toggle${monitoringActive === true ? ' toggle-disabled' : ''}`}
+        title={monitoringActive === true ? 'Stop monitoring to switch source' : 'Select log source'}
       >
         <button
           className={`toggle-option${logSource === 'local' ? ' active' : ''}`}
           onClick={() => setLogSource('local')}
-          disabled={monitoringActive}
+          disabled={monitoringActive === true}
         >
           Local DB
         </button>
         <button
           className={`toggle-option${logSource === 'datadog' ? ' active' : ''}`}
           onClick={() => setLogSource('datadog')}
-          disabled={monitoringActive}
+          disabled={monitoringActive === true}
         >
           Datadog
         </button>
@@ -63,14 +63,14 @@ function MonitoringControl() {
 
       {/* Stop / Start monitoring button */}
       <button
-        className={`btn monitoring-btn${monitoringActive ? ' monitoring-btn-stop' : ' monitoring-btn-start'}`}
+        className={`btn monitoring-btn${monitoringActive === true ? ' monitoring-btn-stop' : ' monitoring-btn-start'}`}
         onClick={toggleMonitoring}
         disabled={monitoringLoading}
-        title={monitoringActive ? 'Stop monitoring' : 'Start monitoring'}
+        title={monitoringActive === true ? 'Stop monitoring' : 'Start monitoring'}
       >
         {monitoringLoading ? (
           <span className="monitoring-spinner" />
-        ) : monitoringActive ? (
+        ) : monitoringActive === true ? (
           <>
             <span className="monitoring-live-dot" />
             Stop Monitoring

@@ -34,6 +34,7 @@ Optional env vars:
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -49,6 +50,29 @@ logger = logging.getLogger("datadog-poller")
 
 # Datadog Logs Search API endpoint (v2)
 _DD_LOGS_URL = "https://api.{site}/api/v2/logs/events/search"
+
+# ── Deduplication cache ───────────────────────────────────────────────────────
+# Prevents the same error type from the same service flooding the DB when the
+# chaos controller fires every few seconds or the initial poll pulls hours of backlog.
+# Key: (service_name, error_type)  Value: epoch time last seen
+_DEDUP_CACHE: dict[tuple, float] = {}
+_DEDUP_TTL_SECONDS = 120   # suppress identical service+error_type within 2 minutes
+
+
+def _is_duplicate(service_name: str, error_type: str) -> bool:
+    """Return True if this service+error_type was seen within the dedup window."""
+    key = (service_name, error_type)
+    now = time.monotonic()
+    last = _DEDUP_CACHE.get(key, 0.0)
+    if now - last < _DEDUP_TTL_SECONDS:
+        return True
+    _DEDUP_CACHE[key] = now
+    return False
+
+
+def clear_dedup_cache() -> None:
+    """Clear the dedup cache — call when restarting the poller so fresh errors flow through."""
+    _DEDUP_CACHE.clear()
 
 
 # ── Project loading ───────────────────────────────────────────────────────────
@@ -160,20 +184,22 @@ async def _poll_service(
     service_name: str,
     environment: str,
     dd_service_tag: str,
+    creds: dict,
+    start_from: Optional[datetime] = None,
 ) -> None:
     """
     Poll Datadog for one service/environment and process any new error events.
 
     Uses cursor-based pagination:
-      - If a cursor is stored (previous poll committed), request the next page.
-      - If no cursor (first poll), start from now - DD_INITIAL_LOOKBACK_HOURS.
+      - If a cursor is stored  → use it (normal incremental fetch)
+      - If no cursor (first poll):
+          - start_from is set  → use that exact timestamp (resume from monitoring stop)
+          - start_from is None → start from now-1min (fresh start, no backlog flood)
 
-    The cursor is saved to service_context_cache AFTER all events in the batch
-    are processed (at-least-once semantics).
+    The cursor is saved AFTER processing each batch (at-least-once delivery).
     """
     cursor: Optional[str] = await read_cursor(service_name)
 
-    # Datadog filter: ERROR or EXCEPTION status only (no WARN)
     query = (
         f"service:{dd_service_tag} "
         f"status:(error OR exception) "
@@ -192,20 +218,31 @@ async def _poll_service(
     if cursor:
         payload["page"]["cursor"] = cursor
     else:
-        lookback_from = datetime.now(timezone.utc) - timedelta(
-            hours=settings.dd_initial_lookback_hours
-        )
+        if start_from is not None:
+            # Resume from exact timestamp when monitoring was paused
+            lookback_from = start_from
+            logger.info(
+                "Resuming %s from stop time %s",
+                service_name, lookback_from.isoformat(),
+            )
+        else:
+            # Fresh start — use 1 minute to avoid backlog flood
+            lookback_from = datetime.now(timezone.utc) - timedelta(minutes=1)
+            logger.info(
+                "Fresh start for %s — polling from %s",
+                service_name, lookback_from.isoformat(),
+            )
         payload["filter"]["from"] = lookback_from.isoformat()
-        logger.info(
-            "No cursor for %s — initial poll from %s",
-            service_name,
-            lookback_from.isoformat(),
-        )
 
-    url = _DD_LOGS_URL.format(site=settings.dd_site)
+    # Use runtime-override creds first (forwarded from Settings UI), then env vars
+    effective_api_key = creds.get("dd_api_key") or settings.dd_api_key
+    effective_app_key = creds.get("dd_app_key") or settings.dd_app_key
+    effective_site    = creds.get("dd_site")    or settings.dd_site
+
+    url = _DD_LOGS_URL.format(site=effective_site)
     headers = {
-        "DD-API-KEY":         settings.dd_api_key,
-        "DD-APPLICATION-KEY": settings.dd_app_key,
+        "DD-API-KEY":         effective_api_key,
+        "DD-APPLICATION-KEY": effective_app_key,
         "Content-Type":       "application/json",
     }
 
@@ -213,12 +250,22 @@ async def _poll_service(
         resp = await session.post(url, json=payload, headers=headers, timeout=30.0)
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        logger.error(
-            "Datadog API HTTP %s for service=%s: %s",
-            exc.response.status_code,
-            service_name,
-            exc.response.text[:400],
-        )
+        status = exc.response.status_code
+        if status == 403:
+            logger.error(
+                "Datadog API key is invalid or lacks permission (HTTP 403). "
+                "Update DD_API_KEY / DD_APP_KEY in your environment or Settings."
+            )
+        elif status == 401:
+            logger.error(
+                "Datadog authentication failed (HTTP 401). "
+                "Check DD_API_KEY and DD_APP_KEY are correct."
+            )
+        else:
+            logger.error(
+                "Datadog API HTTP %s for service=%s: %s",
+                status, service_name, exc.response.text[:400],
+            )
         return
     except Exception as exc:
         logger.error("Datadog API request failed for service=%s: %s", service_name, exc)
@@ -243,13 +290,26 @@ async def _poll_service(
     )
 
     stored_count = 0
+    skipped_dedup = 0
     for log_event in log_events:
         raw_log = _build_raw_log(log_event, service_name)
 
         # Secondary filter: skip events that are not genuinely errors
-        # (Datadog filters are approximate; the local parser is the source of truth)
         if not is_error_line(raw_log):
             logger.debug("Skipping non-error log from Datadog: %.120s", raw_log)
+            continue
+
+        # Deduplication: extract error type from the event before running the full pipeline
+        attrs  = log_event.get("attributes", {})
+        nested = attrs.get("attributes", {})
+        error_type = nested.get("error", {}).get("kind", "") or attrs.get("message", "")[:60]
+
+        if _is_duplicate(service_name, error_type):
+            skipped_dedup += 1
+            logger.debug(
+                "Dedup: skipping %s/%s (same error within %ds window)",
+                service_name, error_type, _DEDUP_TTL_SECONDS,
+            )
             continue
 
         try:
@@ -276,10 +336,10 @@ async def _poll_service(
                 service_name, exc,
             )
 
-    if stored_count:
+    if stored_count or skipped_dedup:
         logger.info(
-            "Stored %d incident(s) this cycle for service=%s",
-            stored_count, service_name,
+            "Cycle for service=%s: %d stored, %d deduplicated",
+            service_name, stored_count, skipped_dedup,
         )
 
     # Save cursor AFTER processing the batch (at-least-once delivery)
@@ -289,7 +349,11 @@ async def _poll_service(
 
 # ── Main polling loop ─────────────────────────────────────────────────────────
 
-async def run_datadog_poller(poll_all: bool = False) -> None:
+async def run_datadog_poller(
+    poll_all: bool = False,
+    creds: dict | None = None,
+    start_from: Optional[datetime] = None,
+) -> None:
     """
     Poll Datadog for new error logs and process them through Gemini → DB.
 
@@ -301,10 +365,15 @@ async def run_datadog_poller(poll_all: bool = False) -> None:
     """
     await ensure_table()
 
-    if not settings.dd_api_key or not settings.dd_app_key:
+    effective_creds = creds or {}
+    effective_api_key = effective_creds.get("dd_api_key") or settings.dd_api_key
+    effective_app_key = effective_creds.get("dd_app_key") or settings.dd_app_key
+    effective_site    = effective_creds.get("dd_site")    or settings.dd_site
+
+    if not effective_api_key or not effective_app_key:
         logger.error(
             "DD_API_KEY and DD_APP_KEY must be set for Datadog polling. "
-            "Check your environment variables."
+            "Set them in Settings → Datadog or as environment variables."
         )
         return
 
@@ -314,19 +383,22 @@ async def run_datadog_poller(poll_all: bool = False) -> None:
         return
 
     logger.info(
-        "Datadog poller started — %d service(s), interval=%ds, site=%s",
+        "Datadog poller started — %d service(s), interval=%ds, site=%s, key=%s",
         len(projects),
         settings.poll_interval_seconds,
-        settings.dd_site,
+        effective_site,
+        "runtime-override" if effective_creds.get("dd_api_key") else "env-var",
     )
 
+    # Clear dedup cache on start so genuinely new errors aren't suppressed
+    clear_dedup_cache()
+
     async with httpx.AsyncClient() as session:
+        first_cycle = True
         while True:
             for project in projects:
                 dd_config = project.get("datadog") or {}
-                # Canonical service name written to error_logs (matches service_repo_map)
                 service_name = project["id"]
-                # Datadog service tag (may differ from canonical name; defined in projects.yaml)
                 dd_service_tag = dd_config.get("service_name", service_name)
                 environment = project.get("environment", "production")
 
@@ -336,6 +408,9 @@ async def run_datadog_poller(poll_all: bool = False) -> None:
                         service_name=service_name,
                         environment=environment,
                         dd_service_tag=dd_service_tag,
+                        creds=effective_creds,
+                        # start_from only applies on the first sweep; after that the cursor drives
+                        start_from=start_from if first_cycle else None,
                     )
                 except Exception as exc:
                     # Per-service errors must not crash the loop
@@ -344,6 +419,7 @@ async def run_datadog_poller(poll_all: bool = False) -> None:
                         service_name, exc,
                     )
 
+            first_cycle = False   # cursor-based pagination takes over from the second cycle
             logger.debug(
                 "Poll cycle complete — sleeping %ds", settings.poll_interval_seconds
             )

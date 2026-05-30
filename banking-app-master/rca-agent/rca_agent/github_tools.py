@@ -1,16 +1,33 @@
 import logging
 from github import Github, GithubException
 from .config import settings
+from .overlay import get as overlay_get
 
 logger = logging.getLogger(__name__)
 _gh = None
+_gh_token: str | None = None   # tracks which PAT the current client was built with
 
 
 def _client() -> Github:
-    global _gh
-    if _gh is None:
-        _gh = Github(settings.github_pat)
+    global _gh, _gh_token
+    # Effective PAT: Settings-UI overlay wins over env
+    effective_pat = overlay_get("github_pat") or settings.github_pat
+    # Recreate client only when the PAT actually changes
+    if _gh is None or _gh_token != effective_pat:
+        _gh_token = effective_pat
+        _gh = Github(effective_pat or None)
+        logger.debug("GitHub client (re)created with PAT ending …%s", (effective_pat or "")[-4:])
     return _gh
+
+
+def _friendly_github_error(e: GithubException, context: str = "") -> str:
+    if e.status == 401:
+        return f"GitHub PAT is invalid or expired. Update it in Settings → GitHub. ({context})"
+    if e.status == 403:
+        return f"GitHub PAT lacks permission for {context}. Ensure it has repo:read scope."
+    if e.status == 404:
+        return f"Not found: {context}"
+    return f"GitHub {e.status}: {e.data.get('message', str(e))} ({context})"
 
 
 def get_repo_file(org: str, repo: str, path: str, ref: str = "main") -> dict:
@@ -20,8 +37,9 @@ def get_repo_file(org: str, repo: str, path: str, ref: str = "main") -> dict:
         f = r.get_contents(path, ref=ref)
         return {"path": path, "content": f.decoded_content.decode("utf-8"), "sha": f.sha}
     except GithubException as e:
-        logger.warning("get_repo_file failed: %s/%s/%s@%s — %s", org, repo, path, ref, e)
-        return {"error": str(e), "path": path}
+        msg = _friendly_github_error(e, f"{org}/{repo}/{path}@{ref}")
+        logger.warning("get_repo_file: %s", msg)
+        return {"error": msg, "path": path}
 
 
 def list_repo_files(org: str, repo: str, directory: str = "", ref: str = "main") -> dict:
@@ -34,8 +52,9 @@ def list_repo_files(org: str, repo: str, directory: str = "", ref: str = "main")
         files = [{"path": c.path, "type": c.type, "size": c.size} for c in contents]
         return {"directory": directory or "/", "files": files}
     except GithubException as e:
-        logger.warning("list_repo_files failed: %s/%s/%s — %s", org, repo, directory, e)
-        return {"error": str(e)}
+        msg = _friendly_github_error(e, f"{org}/{repo}/{directory or '/'}")
+        logger.warning("list_repo_files: %s", msg)
+        return {"error": msg}
 
 
 def search_code_in_repo(org: str, repo: str, query: str) -> dict:
@@ -46,8 +65,9 @@ def search_code_in_repo(org: str, repo: str, query: str) -> dict:
         items = [{"path": r.path, "url": r.html_url} for r in list(results)[:10]]
         return {"query": query, "results": items}
     except GithubException as e:
-        logger.warning("search_code_in_repo failed: %s — %s", query, e)
-        return {"error": str(e), "results": []}
+        msg = _friendly_github_error(e, f"search:{query} in {org}/{repo}")
+        logger.warning("search_code_in_repo: %s", msg)
+        return {"error": msg, "results": []}
 
 
 def get_commit_diff(org: str, repo: str, commit_sha: str) -> dict:
@@ -72,8 +92,9 @@ def get_commit_diff(org: str, repo: str, commit_sha: str) -> dict:
             "files": files,
         }
     except GithubException as e:
-        logger.warning("get_commit_diff failed: %s@%s — %s", repo, commit_sha, e)
-        return {"error": str(e)}
+        msg = _friendly_github_error(e, f"{org}/{repo}@{commit_sha}")
+        logger.warning("get_commit_diff: %s", msg)
+        return {"error": msg}
 
 
 def get_commits_since(org: str, repo: str, branch: str, since: str) -> dict:
@@ -94,8 +115,9 @@ def get_commits_since(org: str, repo: str, branch: str, since: str) -> dict:
         ]
         return {"branch": branch, "commits": items}
     except GithubException as e:
-        logger.warning("get_commits_since failed: %s/%s — %s", repo, branch, e)
-        return {"error": str(e), "commits": []}
+        msg = _friendly_github_error(e, f"{org}/{repo}@{branch}")
+        logger.warning("get_commits_since: %s", msg)
+        return {"error": msg, "commits": []}
 
 
 def search_github_global(
@@ -146,5 +168,6 @@ def search_github_global(
             results.append(entry)
         return {"results": results, "count": len(results), "query_used": full_query}
     except GithubException as e:
-        logger.warning("search_github_global failed: %s — %s", query, e)
-        return {"error": str(e), "results": [], "count": 0, "query_used": query}
+        msg = _friendly_github_error(e, f"global search: {query}")
+        logger.warning("search_github_global: %s", msg)
+        return {"error": msg, "results": [], "count": 0, "query_used": query}

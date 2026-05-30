@@ -2144,3 +2144,112 @@ ul { list-style: none; }
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+
+/* ============================================================
+   Settings — badges & restart notice
+   ============================================================ */
+
+.settings-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.settings-badge-live {
+  background: rgba(16,185,129,0.12);
+  color: var(--success);
+  border: 1px solid rgba(16,185,129,0.25);
+}
+.settings-badge-restart {
+  background: rgba(245,158,11,0.12);
+  color: var(--warning);
+  border: 1px solid rgba(245,158,11,0.25);
+}
+
+.settings-restart-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--warning);
+  line-height: 1.5;
+  margin-bottom: var(--sp-5);
+}
+.settings-restart-notice svg { flex-shrink: 0; margin-top: 2px; }
+
+.settings-section-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: -8px 0 16px;
+  line-height: 1.6;
+}
+
+
+/* ============================================================
+   Settings — credential test results
+   ============================================================ */
+
+.settings-actions-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+.cred-test-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+.cred-ok {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  color: var(--success);
+}
+.cred-fail {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.25);
+  color: #f87171;
+}
+.cred-test-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.btn-test {
+  background: var(--indigo-dim);
+  color: var(--indigo-light);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: var(--r-md);
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--t-fast);
+}
+.btn-test:hover:not(:disabled) {
+  background: rgba(99,102,241,0.22);
+  border-color: rgba(99,102,241,0.5);
+}
+.btn-test:disabled { opacity: 0.5; cursor: not-allowed; }

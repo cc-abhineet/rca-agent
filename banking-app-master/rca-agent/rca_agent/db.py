@@ -4,10 +4,12 @@ import pymysql.cursors
 from contextlib import contextmanager
 from urllib.parse import urlparse
 from .config import settings
+from .overlay import get as overlay_get
 
 
 def _conn_kwargs() -> dict:
-    url = settings.database_url
+    # Settings-UI overlay wins over env so the user can change DB URL at runtime
+    url = overlay_get("database_url") or settings.database_url
     # Accept mysql+pymysql:// or mysql://
     url = url.replace("mysql+pymysql://", "mysql://").replace("mysql+mysqldb://", "mysql://")
     parsed = urlparse(url)

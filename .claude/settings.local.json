@@ -27,7 +27,9 @@
       "Bash(npm run *)",
       "Bash(cp -r 'E:\\\\WISSEN\\\\rca-agent\\\\.claude\\\\worktrees\\\\agent-ab60af6398876d542/banking-app-master/rca-agent/ui/src' 'E:\\\\WISSEN\\\\rca-agent/banking-app-master/rca-agent/ui/')",
       "Bash(cp -r 'E:\\\\WISSEN\\\\rca-agent\\\\.claude\\\\worktrees\\\\agent-ab60af6398876d542/banking-app-master/rca-agent/ui/dist/' 'E:\\\\WISSEN\\\\rca-agent/banking-app-master/rca-agent/ui/')",
-      "Bash(Start-Sleep -Seconds 3)"
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Start-Sleep 3)",
+      "Bash(xargs cat)"
     ]
   }
 }

@@ -203,17 +203,21 @@ export default function RCAStreamPanel() {
   const [done, setDone]         = useState(false)
   const [phase, setPhase]       = useState(0)
   const [iterCount, setIterCount] = useState(0)
-  const scrollRef = useRef(null)
+  const scrollRef  = useRef(null)
   const cleanupRef = useRef(null)
+  const phaseRef   = useRef(0)   // mirrors phase state; always current inside callbacks
 
   const elapsed = useElapsed(running)
 
+  // Keep phaseRef in sync so the stream callback never reads a stale closure value
+  useEffect(() => { phaseRef.current = phase }, [phase])
+
   const advancePhase = useCallback((type) => {
-    if (type === 'start')          setPhase(0)
-    else if (type === 'repo_resolved') setPhase(1)
-    else if (type === 'tool_call' && phase < 2) setPhase(2)
-    else if (type === 'done')      setPhase(3)
-  }, [phase])
+    if (type === 'start')               { setPhase(0); phaseRef.current = 0 }
+    else if (type === 'repo_resolved')  { setPhase(1); phaseRef.current = 1 }
+    else if (type === 'tool_call' && phaseRef.current < 2) { setPhase(2); phaseRef.current = 2 }
+    else if (type === 'done')           { setPhase(3); phaseRef.current = 3 }
+  }, [])  // no phase dep — reads phaseRef.current which is always fresh
 
   useEffect(() => {
     if (!streamTarget) return

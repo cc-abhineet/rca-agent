@@ -112,6 +112,9 @@ def log_token_usage_sync(
     input_tokens: int,
     output_tokens: int,
     estimated_cost_usd: float = 0.0,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
+    iteration_num: int | None = None,
 ) -> None:
     """Sync PyMySQL token logging — called from synchronous analyze_node."""
     try:
@@ -124,14 +127,19 @@ def log_token_usage_sync(
             password=dsn["password"],
             database=dsn["db"],
             charset="utf8mb4",
+            connect_timeout=5,
         )
         with conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO token_usage
-                           (model, source, input_tokens, output_tokens, estimated_cost_usd)
-                       VALUES (%s, %s, %s, %s, %s)""",
-                    (model, source, input_tokens, output_tokens, estimated_cost_usd),
+                           (model, source, input_tokens, output_tokens,
+                            cache_read_tokens, cache_creation_tokens,
+                            estimated_cost_usd, iteration_num)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (model, source, input_tokens, output_tokens,
+                     cache_read_tokens, cache_creation_tokens,
+                     estimated_cost_usd, iteration_num),
                 )
             conn.commit()
     except Exception as exc:

@@ -21,6 +21,7 @@ from rca_agent.adapters.cicd.mock_adapter import MockCICDAdapter
 from rca_agent.agent import RCAAgent
 from rca_agent.report_renderer import render_rca_html
 from rca_agent.token_pricing import display_name as model_display_name
+from rca_agent.overlay import invalidate as invalidate_overlay_cache
 
 logger = logging.getLogger("rca-agent")
 
@@ -63,6 +64,22 @@ def _get_overlay(key: str, default=None):
     return _settings_overlay.get(key, default)
 
 
+def _effective_agent_settings() -> dict:
+    """Return the runtime-effective values that must be passed to agent.run().
+    Merges the user's Settings-UI overlay on top of env defaults."""
+    raw_iters = _get_overlay("max_react_iterations") or settings.max_react_iterations
+    try:
+        max_iters = int(raw_iters)
+    except (TypeError, ValueError):
+        logger.warning("Invalid max_react_iterations value %r — using env default", raw_iters)
+        max_iters = settings.max_react_iterations
+    return {
+        "api_key":        _get_overlay("anthropic_api_key") or settings.anthropic_api_key,
+        "model":          _get_overlay("model")             or settings.model,
+        "max_iterations": max_iters,
+    }
+
+
 _load_settings_overlay()
 
 # Ensure token_usage table exists at startup (idempotent)
@@ -90,10 +107,10 @@ app.add_middleware(
 def health():
     return {
         "status": "ok",
-        "model": settings.model,
-        "github_org": settings.github_org,
-        "observability_adapter": settings.observability_adapter,
-        "cicd_adapter": settings.cicd_adapter,
+        "model":                 _get_overlay("model")        or settings.model,
+        "github_org":            _get_overlay("github_org")   or settings.github_org,
+        "observability_adapter": _get_overlay("observability_adapter") or settings.observability_adapter,
+        "cicd_adapter":          _get_overlay("cicd_adapter") or settings.cicd_adapter,
     }
 
 
@@ -110,7 +127,7 @@ def run_rca(req: RunRCARequest):
         (req.error_log_id,),
     )
     try:
-        report = agent.run(req.error_log_id)
+        report = agent.run(req.error_log_id, **_effective_agent_settings())
         execute(
             """UPDATE error_logs
                SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
@@ -150,7 +167,8 @@ def run_rca_stream(req: StreamRCARequest):
                 "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
                 (req.error_log_id,),
             )
-            report = agent.run(req.error_log_id, trace_callback=trace_callback)
+            eff = _effective_agent_settings()
+            report = agent.run(req.error_log_id, trace_callback=trace_callback, **eff)
             execute(
                 """UPDATE error_logs
                    SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
@@ -472,7 +490,109 @@ def api_post_settings(body: SettingsUpdate):
     settings_file = _apollo_settings_file()
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(_settings_overlay, indent=2))
+    invalidate_overlay_cache()   # force next DB/github/resolver call to re-read the file
     return {"status": "saved", "keys": list(updates.keys())}
+
+
+# ── Credential validation ─────────────────────────────────────────────────────
+
+class CredentialTestRequest(BaseModel):
+    key_type: str           # 'anthropic' | 'github' | 'datadog'
+    api_key:  Optional[str] = None   # key to test; falls back to current effective value
+    app_key:  Optional[str] = None   # Datadog app key
+    org:      Optional[str] = None   # GitHub org (for context, not validated)
+
+
+@app.post("/api/settings/test")
+async def api_test_credential(body: CredentialTestRequest):
+    """
+    Test a credential without saving it.
+    Returns {valid: bool, message: str}.
+    """
+    key_type = body.key_type
+
+    # ── Anthropic ────────────────────────────────────────────────────────────
+    if key_type == "anthropic":
+        import anthropic as _anthropic
+        api_key = body.api_key or _get_overlay("anthropic_api_key") or settings.anthropic_api_key
+        if not api_key:
+            return {"valid": False, "message": "No Anthropic API key configured."}
+        try:
+            client = _anthropic.Anthropic(api_key=api_key)
+            client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            return {"valid": True, "message": "Anthropic API key is valid ✓"}
+        except _anthropic.AuthenticationError:
+            return {"valid": False, "message": "Invalid Anthropic API key. Check it at console.anthropic.com → API Keys."}
+        except _anthropic.PermissionDeniedError:
+            return {"valid": False, "message": "Anthropic key lacks permission. Verify scopes at console.anthropic.com."}
+        except _anthropic.RateLimitError:
+            return {"valid": True, "message": "Key is valid but rate-limited — you've hit your usage cap. Increase it at console.anthropic.com → Billing → Limits."}
+        except _anthropic.BadRequestError as e:
+            msg = str(e)
+            if "usage limits" in msg.lower() or "regain access" in msg.lower():
+                return {"valid": True, "message": "Key is valid but monthly usage limit reached. Increase it at console.anthropic.com → Billing → Limits."}
+            return {"valid": False, "message": f"Anthropic error: {msg}"}
+        except Exception as e:
+            return {"valid": False, "message": f"Could not reach Anthropic: {e}"}
+
+    # ── GitHub ───────────────────────────────────────────────────────────────
+    elif key_type == "github":
+        from github import Github, GithubException
+        pat = body.api_key or _get_overlay("github_pat") or settings.github_pat
+        if not pat:
+            return {"valid": False, "message": "No GitHub PAT configured."}
+        try:
+            gh = Github(pat)
+            user = gh.get_user()
+            login = user.login   # triggers actual API call
+            rate = gh.get_rate_limit().core
+            return {"valid": True, "message": f"GitHub PAT valid — authenticated as @{login} (API: {rate.remaining}/{rate.limit} remaining) ✓"}
+        except GithubException as e:
+            if e.status == 401:
+                return {"valid": False, "message": "Invalid or expired GitHub PAT. Generate a new one at github.com/settings/tokens."}
+            if e.status == 403:
+                return {"valid": False, "message": "GitHub PAT lacks required permissions. Ensure it has repo:read scope."}
+            return {"valid": False, "message": f"GitHub API error {e.status}: {e.data.get('message', str(e))}"}
+        except Exception as e:
+            return {"valid": False, "message": f"Could not reach GitHub: {e}"}
+
+    # ── Datadog ──────────────────────────────────────────────────────────────
+    elif key_type == "datadog":
+        dd_api_key = body.api_key or _get_overlay("dd_api_key") or os.environ.get("DD_API_KEY", "")
+        dd_app_key = body.app_key or _get_overlay("dd_app_key") or os.environ.get("DD_APP_KEY", "")
+        dd_site    = _get_overlay("dd_site") or os.environ.get("DD_SITE", "us5.datadoghq.com")
+        if not dd_api_key:
+            return {"valid": False, "message": "No Datadog API key configured."}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # /api/v1/validate is purpose-built for key validation, free to call
+                resp = await client.get(
+                    f"https://api.{dd_site}/api/v1/validate",
+                    headers={"DD-API-KEY": dd_api_key},
+                )
+            if resp.status_code == 200:
+                # Also test app key if provided
+                if dd_app_key:
+                    async with httpx.AsyncClient(timeout=10.0) as client2:
+                        resp2 = await client2.get(
+                            f"https://api.{dd_site}/api/v1/validate",
+                            headers={"DD-API-KEY": dd_api_key, "DD-APPLICATION-KEY": dd_app_key},
+                        )
+                    if resp2.status_code != 200:
+                        return {"valid": False, "message": "API key is valid but Application key is invalid. Check it at app.datadoghq.com → Organization Settings → Application Keys."}
+                return {"valid": True, "message": f"Datadog credentials valid (site: {dd_site}) ✓"}
+            elif resp.status_code == 403:
+                return {"valid": False, "message": "Invalid Datadog API key. Check it at app.datadoghq.com → Organization Settings → API Keys."}
+            else:
+                return {"valid": False, "message": f"Datadog returned HTTP {resp.status_code}. Check your site setting ({dd_site})."}
+        except Exception as e:
+            return {"valid": False, "message": f"Could not reach Datadog ({dd_site}): {e}"}
+
+    return {"valid": False, "message": f"Unknown key_type: {key_type}"}
 
 
 @app.get("/api/datadog/logs")
@@ -554,13 +674,18 @@ class SourceRequest(BaseModel):
 
 @app.post("/api/source")
 async def api_set_source(req: SourceRequest):
-    """Switch the ingestion agent between local file watching and Datadog polling."""
+    """Switch ingestion agent source, forwarding effective DD credentials."""
+    # Always forward the effective DD creds so the ingestion agent uses the
+    # Settings-UI values rather than only its own env vars.
+    payload = {
+        "source":     req.source,
+        "dd_api_key": _get_overlay("dd_api_key") or os.environ.get("DD_API_KEY", ""),
+        "dd_app_key": _get_overlay("dd_app_key") or os.environ.get("DD_APP_KEY", ""),
+        "dd_site":    _get_overlay("dd_site")    or os.environ.get("DD_SITE", "us5.datadoghq.com"),
+    }
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                f"{_INGESTION_AGENT_URL}/source",
-                json={"source": req.source},
-            )
+            resp = await client.post(f"{_INGESTION_AGENT_URL}/source", json=payload)
             return resp.json()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"ingestion-agent unreachable: {exc}")
@@ -585,13 +710,15 @@ async def api_get_monitoring():
 
 @app.post("/api/monitoring")
 async def api_set_monitoring(req: MonitoringRequest):
-    """Stop or start all monitoring on the ingestion agent."""
+    """Stop or start monitoring, forwarding effective DD credentials on start."""
+    payload: dict = {"action": req.action}
+    if req.action == "start":
+        payload["dd_api_key"] = _get_overlay("dd_api_key") or os.environ.get("DD_API_KEY", "")
+        payload["dd_app_key"] = _get_overlay("dd_app_key") or os.environ.get("DD_APP_KEY", "")
+        payload["dd_site"]    = _get_overlay("dd_site")    or os.environ.get("DD_SITE", "us5.datadoghq.com")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                f"{_INGESTION_AGENT_URL}/monitoring",
-                json={"action": req.action},
-            )
+            resp = await client.post(f"{_INGESTION_AGENT_URL}/monitoring", json=payload)
             return resp.json()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"ingestion-agent unreachable: {exc}")
@@ -625,7 +752,7 @@ def api_trigger_rca(req: TriggerRCARequest):
         (req.error_log_id,),
     )
     try:
-        report = agent.run(req.error_log_id)
+        report = agent.run(req.error_log_id, **_effective_agent_settings())
         execute(
             """UPDATE error_logs
                SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
@@ -655,7 +782,7 @@ def api_rca_stream(error_log_id: str):
                 "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
                 (error_log_id,),
             )
-            report = agent.run(error_log_id, trace_callback=trace_callback)
+            report = agent.run(error_log_id, trace_callback=trace_callback, **_effective_agent_settings())
             execute(
                 """UPDATE error_logs
                    SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s

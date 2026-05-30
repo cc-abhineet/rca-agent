@@ -60,6 +60,10 @@ export const setSource = (source) =>
 export const cancelRCA = (error_log_id) =>
   request(`/api/rca/cancel/${error_log_id}`, { method: 'POST' })
 
+// Credential testing
+export const testCredential = (body) =>
+  request('/api/settings/test', { method: 'POST', body: JSON.stringify(body) })
+
 // RCA
 export const triggerRCA = (error_log_id) =>
   request('/api/rca/trigger', { method: 'POST', body: JSON.stringify({ error_log_id }) })

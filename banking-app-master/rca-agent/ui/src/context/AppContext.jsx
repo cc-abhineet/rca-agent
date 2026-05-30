@@ -6,7 +6,8 @@ const AppContext = createContext(null)
 export function AppProvider({ children }) {
   const [activeNav, setActiveNav]           = useState('logs')
   const [logSource, setLogSourceState]      = useState('local')   // 'local' | 'datadog'
-  const [monitoringActive, setMonitoringActive] = useState(true)  // synced with ingestion agent
+  // null = not yet synced (don't block UI); true/false = known state
+  const [monitoringActive, setMonitoringActive] = useState(null)
   const [monitoringLoading, setMonitoringLoading] = useState(false)
   const [streamTarget, setStreamTarget]     = useState(null)
   const [toast, setToast]                   = useState(null)
@@ -23,7 +24,10 @@ export function AppProvider({ children }) {
         setMonitoringActive(data.monitoring_active ?? true)
         setLogSourceState(data.source || 'local')
       })
-      .catch(() => {})  // silent — ingestion-agent may not be up yet
+      .catch(() => {
+        // If ingestion-agent is unreachable, treat as stopped so UI isn't permanently blocked
+        setMonitoringActive(prev => prev === null ? false : prev)
+      })
   }, [])
 
   useEffect(() => {
@@ -50,9 +54,9 @@ export function AppProvider({ children }) {
     }
   }, [monitoringActive, showToast])
 
-  // Switch log source (only callable when monitoring is stopped)
+  // Switch log source (only callable when monitoring is stopped or unknown)
   const setLogSource = useCallback(async (newSource) => {
-    if (monitoringActive) return   // guard: toggle disabled while active
+    if (monitoringActive === true) return   // guard: toggle disabled while known-active
     setLogSourceState(newSource)
     try {
       await setSource(newSource)

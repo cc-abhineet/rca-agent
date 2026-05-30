@@ -429,7 +429,8 @@ class RCAAgent:
     def __init__(self, obs_adapter, cicd_adapter):
         self.obs = obs_adapter
         self.cicd = cicd_adapter
-        self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        # Base client uses env key; per-run client is created in run() with effective key
+        self._base_api_key = settings.anthropic_api_key
 
     def _emit(self, callback: Callable[[dict], None] | None, event: dict) -> None:
         """Emit a trace event if a callback is registered."""
@@ -445,7 +446,19 @@ class RCAAgent:
         self,
         error_log_id: str,
         trace_callback: Callable[[dict], None] | None = None,
+        # Runtime overrides — callers pass effective values (env + Settings UI overlay)
+        api_key: str | None = None,
+        model: str | None = None,
+        max_iterations: int | None = None,
     ) -> RCAReport:
+        # Resolve effective settings: caller overrides take priority over env defaults
+        effective_key   = api_key        or settings.anthropic_api_key
+        effective_model = model          or settings.model
+        effective_iters = max_iterations or settings.max_react_iterations
+
+        # Fresh client per run — picks up any runtime key change immediately
+        client = anthropic.Anthropic(api_key=effective_key)
+
         # 1. Load error log
         error_log = self.obs.get_error_log(error_log_id)
 
@@ -523,17 +536,39 @@ class RCAAgent:
         _pending_memory_write: dict | None = None   # staged by write_dependency_memory tool
         final_report: RCAReport | None = None
 
-        while iterations < settings.max_react_iterations:
+        while iterations < effective_iters:
             iterations += 1
             logger.debug("ReAct iteration %d", iterations)
 
-            response = self.client.messages.create(
-                model=settings.model,
-                max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                tools=TOOLS,
-                messages=messages,
-            )
+            try:
+                response = client.messages.create(
+                    model=effective_model,
+                    max_tokens=4096,
+                    system=SYSTEM_PROMPT,
+                    tools=TOOLS,
+                    messages=messages,
+                )
+            except anthropic.AuthenticationError:
+                raise RuntimeError(
+                    "Invalid Anthropic API key. Update it in Settings → Claude AI."
+                )
+            except anthropic.PermissionDeniedError:
+                raise RuntimeError(
+                    "Anthropic API key lacks permission. Check your key at console.anthropic.com."
+                )
+            except anthropic.RateLimitError:
+                raise RuntimeError(
+                    "Anthropic rate limit reached. Increase your usage limit at "
+                    "console.anthropic.com → Billing → Limits."
+                )
+            except anthropic.BadRequestError as _bre:
+                _msg = str(_bre)
+                if "usage limits" in _msg.lower() or "regain access" in _msg.lower():
+                    raise RuntimeError(
+                        f"Anthropic monthly usage limit reached. {_msg} "
+                        "Increase it at console.anthropic.com → Billing → Limits."
+                    )
+                raise
 
             # Record real token counts from the API response
             try:
@@ -541,7 +576,7 @@ class RCAAgent:
                 cache_r = getattr(u, "cache_read_input_tokens", 0) or 0
                 cache_w = getattr(u, "cache_creation_input_tokens", 0) or 0
                 log_token_usage(
-                    model=settings.model,
+                    model=effective_model,
                     source="rca_agent",
                     input_tokens=u.input_tokens,
                     output_tokens=u.output_tokens,
@@ -549,7 +584,7 @@ class RCAAgent:
                     cache_read_tokens=cache_r,
                     cache_creation_tokens=cache_w,
                     estimated_cost_usd=compute_cost(
-                        settings.model, u.input_tokens, u.output_tokens, cache_r, cache_w
+                        effective_model, u.input_tokens, u.output_tokens, cache_r, cache_w
                     ),
                     iteration_num=iterations,
                 )
@@ -910,7 +945,7 @@ class RCAAgent:
             report_data["analysis_metadata"]["github_files_fetched"] = github_files_fetched
             report_data["analysis_metadata"]["cache_hits"] = cache_hits
             report_data["analysis_metadata"]["repos_investigated"] = repos_investigated
-            report_data["analysis_metadata"]["model"] = settings.model
+            report_data["analysis_metadata"]["model"] = effective_model
             report_data["analysis_metadata"].setdefault("react_iterations", 0)
             report_data["analysis_metadata"].setdefault("deployment_record_used", False)
             report_data["analysis_metadata"].setdefault("repo_discovered_via", "unknown")

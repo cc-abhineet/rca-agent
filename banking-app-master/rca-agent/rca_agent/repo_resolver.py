@@ -4,8 +4,14 @@ from .config import settings
 from .db import execute_one, execute
 from .models import RepoMapping, DeploymentRecord
 from .adapters.protocols import CICDAdapterProtocol
+from .overlay import get as overlay_get
 
 logger = logging.getLogger(__name__)
+
+
+def _effective_org() -> str:
+    """Return GitHub org from Settings-UI overlay, falling back to env."""
+    return overlay_get("github_org") or _effective_org()
 
 
 class RepoResolver:
@@ -37,9 +43,9 @@ class RepoResolver:
             )
 
         if github_repo and not mapping:
-            self._write_mapping(service_name, settings.github_org, github_repo)
+            self._write_mapping(service_name, _effective_org(), github_repo)
             return dict(
-                org=settings.github_org, repo=github_repo, branch=branch,
+                org=_effective_org(), repo=github_repo, branch=branch,
                 commit_sha=commit_sha, deployment_record_used=deployment_record_used,
                 discovered_via="cicd",
             )
