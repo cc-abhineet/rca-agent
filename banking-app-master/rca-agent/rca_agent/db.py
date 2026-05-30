@@ -78,3 +78,55 @@ def json_loads(v):
     if isinstance(v, (dict, list)):
         return v
     return json.loads(v)
+
+
+_TOKEN_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS token_usage (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    error_log_id     VARCHAR(36)      DEFAULT NULL,
+    model            VARCHAR(100)     NOT NULL,
+    source           VARCHAR(50)      NOT NULL,
+    input_tokens     INT              NOT NULL DEFAULT 0,
+    output_tokens    INT              NOT NULL DEFAULT 0,
+    cache_read_tokens      INT        NOT NULL DEFAULT 0,
+    cache_creation_tokens  INT        NOT NULL DEFAULT 0,
+    estimated_cost_usd  DECIMAL(12,8) NOT NULL DEFAULT 0,
+    iteration_num    INT              DEFAULT NULL,
+    created_at       DATETIME         DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tu_error_log (error_log_id),
+    INDEX idx_tu_model     (model),
+    INDEX idx_tu_created   (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def create_token_usage_table() -> None:
+    """Idempotent: create token_usage table if it does not already exist."""
+    execute(_TOKEN_TABLE_DDL)
+
+
+def log_token_usage(
+    model: str,
+    source: str,
+    input_tokens: int,
+    output_tokens: int,
+    error_log_id: str | None = None,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
+    estimated_cost_usd: float = 0.0,
+    iteration_num: int | None = None,
+) -> None:
+    """Insert one token-usage row.  Best-effort — caller should swallow exceptions."""
+    execute(
+        """INSERT INTO token_usage
+               (error_log_id, model, source, input_tokens, output_tokens,
+                cache_read_tokens, cache_creation_tokens,
+                estimated_cost_usd, iteration_num)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        (
+            error_log_id, model, source,
+            input_tokens, output_tokens,
+            cache_read_tokens, cache_creation_tokens,
+            estimated_cost_usd, iteration_num,
+        ),
+    )

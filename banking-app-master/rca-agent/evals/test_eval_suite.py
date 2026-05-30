@@ -69,7 +69,7 @@ def test_eval_case(case, tmp_path, monkeypatch):
         "rca_agent.agent.append_rca_history", lambda svc, summary: None
     )
     monkeypatch.setattr(
-        "rca_agent.agent.RCAAgent._persist", lambda self, report: None
+        "rca_agent.agent.RCAAgent._persist", lambda self, report, error_log_id: None
     )
     monkeypatch.setattr(
         "rca_agent.repo_resolver.RepoResolver._get_mapping", lambda self, svc: None

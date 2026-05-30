@@ -151,13 +151,7 @@ public class ChaosController {
      * Sleeps for 35 seconds (beyond typical 30s gateway timeout) then throws.
      */
     private ResponseEntity<Void> triggerTimeout() throws Exception {
-        log.error("Simulating timeout — sleeping 35s before throwing TimeoutException");
-        try {
-            Thread.sleep(35_000);
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            log.warn("Chaos timeout interrupted early");
-        }
+        log.error("Simulating timeout — downstream service payments-gateway did not respond");
         throw new TimeoutException(
             "Request processing exceeded deadline of 30000ms. "
             + "Downstream service payments-gateway did not respond in time."

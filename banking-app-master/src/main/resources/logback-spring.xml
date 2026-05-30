@@ -2,7 +2,6 @@
 <configuration>
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <!-- Datadog log pipeline keys -->
             <fieldNames>
                 <timestamp>timestamp</timestamp>
                 <message>message</message>
@@ -16,13 +15,11 @@
             <includeMdcKeyName>dd.service</includeMdcKeyName>
             <includeMdcKeyName>dd.env</includeMdcKeyName>
             <includeMdcKeyName>dd.version</includeMdcKeyName>
-            <!-- Extra static fields -->
             <customFields>{"service":"banking-app"}</customFields>
         </encoder>
     </appender>
 
-    <!-- File appender — writes to Docker shared volume at /var/log/banking-app/app.log -->
-    <!-- Uses plain text so the error-ingestion-agent log_parser.py can read it -->
+    <!-- Plain text — read by error-ingestion-agent and the UI dashboard -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>/var/log/banking-app/app.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -34,9 +31,23 @@
         </encoder>
     </appender>
 
+    <!-- JSON — read by the Datadog agent; immediateFlush ensures no buffering lag -->
+    <appender name="DATADOG_JSON" class="ch.qos.logback.core.FileAppender">
+        <file>/var/log/banking-app/banking-app.json.log</file>
+        <immediateFlush>true</immediateFlush>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- error.stack is Datadog's standard attribute for stack traces -->
+            <fieldNames>
+                <stackTrace>error.stack</stackTrace>
+            </fieldNames>
+            <customFields>{"service":"banking-app","ddsource":"java","env":"dev"}</customFields>
+        </encoder>
+    </appender>
+
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
+        <appender-ref ref="DATADOG_JSON"/>
     </root>
 
     <logger name="com.demo.banking" level="DEBUG"/>

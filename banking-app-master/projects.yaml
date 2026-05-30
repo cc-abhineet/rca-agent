@@ -1,79 +1,120 @@
-version: "1.0"
+version: "2.0"
 
-# projects.yaml — RCA Agent pluggability config
-# Add new projects here to have rca-agent monitor them automatically.
-# No code changes required — rca-agent reads this file at startup.
+# ═══════════════════════════════════════════════════════════════════════════════
+# projects.yaml — Single source of truth for every service this platform monitors
+#
+# HOW TO ADD A NEW SERVICE (no code changes required):
+#   1. Add an entry below with id, github_org, github_repo, language, etc.
+#   2. Set observability_mode: db  and  log_path: /path/to/your/app.log
+#   3. Run: python add_service_map.py          (registers GitHub repo in DB)
+#   4. Mount the log volume in docker-compose ingestion-agent section
+#   5. Run: docker compose up --build          (agent auto-discovers new entry)
+#
+# SUPPORTED LANGUAGES:  java | python | nodejs | go | generic
+# OBSERVABILITY MODES:  db (tail log file) | datadog (Datadog Logs API)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 projects:
+
+  # ── Banking App ──────────────────────────────────────────────────────────────
   - id: banking-app
     name: "Banking App"
     description: "Spring Boot banking application with account management and transactions"
     github_org: oscorpAI
     github_repo: banking-app
-    environment: production
-    observability_mode: datadog    # 'datadog' | 'db'
+    default_branch: main
+    language: java
+    environment: dev
+    observability_mode: db          # tail log file → error_logs table
+    log_path: /var/log/banking-app/app.log
 
     datadog:
       service_name: banking-app
-      env: production
-      monitor_ids: []              # populated after: terraform apply terraform/datadog_monitor.tf
+      env: dev
+      monitor_ids: []
 
-    # Public ALB endpoint for chaos scenario triggering from demo UI
-    chaos_endpoint: http://banking-app-alb.us-east-1.elb.amazonaws.com/chaos
+    chaos_endpoint: http://banking-app:8080/chaos
 
-    # log_path is only used when observability_mode is 'db'
-    log_path: null
-
-  # ── Cross-service demo: pricing-service + order-service ────────────────────
-  # pricing-service v2.1.0 renamed discountRate (was discount).
-  # order-service still reads discount → NullPointerException (Bug A).
-  # order-service also has an off-by-one in resolveQuantity (Bug B).
-  #
-  # Start with: docker compose --profile pricing up --build
-  # Then seed:  python demo-repos/demo_seed_data.py --scenario cross-service
-
+  # ── Pricing Service ──────────────────────────────────────────────────────────
   - id: pricing-service
     name: "Pricing Service"
-    description: "Spring Boot service that calculates SKU prices and customer-tier discounts. v2.1.0 renamed 'discount' field to 'discountRate' — order-service has not been updated."
+    description: "Spring Boot pricing engine. v2.1.0 renamed 'discount' → 'discountRate'."
     github_org: oscorpAI
     github_repo: pricing-service
-    environment: production
-    observability_mode: datadog
+    default_branch: main
+    language: java
+    environment: dev
+    observability_mode: datadog     # switch to db + add log_path to watch locally
+    log_path: /var/log/pricing-service/app.log
 
     datadog:
       service_name: pricing-service
-      env: production
+      env: dev
       monitor_ids: []
 
-    chaos_endpoint: http://localhost:8081/chaos
+    chaos_endpoint: http://pricing-service:8081/chaos
 
-    log_path: null
-
+  # ── Order Service ────────────────────────────────────────────────────────────
   - id: order-service
     name: "Order Service"
-    description: "Spring Boot service that creates orders by calling pricing-service. Contains Bug A (NPE from stale discount field) and Bug B (off-by-one in resolveQuantity)."
+    description: "Spring Boot order service. Calls pricing-service. Contains Bug A + Bug B."
     github_org: oscorpAI
     github_repo: order-service
-    environment: production
-    observability_mode: datadog
+    default_branch: main
+    language: java
+    environment: dev
+    observability_mode: datadog     # switch to db + add log_path to watch locally
+    log_path: /var/log/order-service/app.log
 
     datadog:
       service_name: order-service
-      env: production
+      env: dev
       monitor_ids: []
 
-    chaos_endpoint: http://localhost:8082/chaos
+    chaos_endpoint: http://order-service:8082/chaos
 
-    log_path: null
+  # ═══════════════════════════════════════════════════════════════════════════
+  # EXAMPLE ENTRIES — uncomment and fill in to add your own services
+  # ═══════════════════════════════════════════════════════════════════════════
 
-  # Example: add a service in db (file-watcher) mode
-  # - id: payments-service
-  #   name: "Payments Service"
-  #   description: "Internal payments processing microservice"
-  #   github_org: oscorpAI
-  #   github_repo: payments-service
+  # ── Python / FastAPI service ─────────────────────────────────────────────────
+  # - id: payments-api
+  #   name: "Payments API"
+  #   description: "Python FastAPI payment processing service"
+  #   github_org: myorg
+  #   github_repo: payments-api
+  #   default_branch: main
+  #   language: python
   #   environment: production
   #   observability_mode: db
+  #   log_path: /var/log/payments-api/app.log
   #   datadog: null
   #   chaos_endpoint: null
-  #   log_path: /var/log/payments-service/app.log
+
+  # ── Node.js / Express service ─────────────────────────────────────────────────
+  # - id: notification-service
+  #   name: "Notification Service"
+  #   description: "Node.js Express email/SMS notification service"
+  #   github_org: myorg
+  #   github_repo: notification-service
+  #   default_branch: main
+  #   language: nodejs
+  #   environment: production
+  #   observability_mode: db
+  #   log_path: /var/log/notification-service/app.log
+  #   datadog: null
+  #   chaos_endpoint: null
+
+  # ── Go service ────────────────────────────────────────────────────────────────
+  # - id: inventory-service
+  #   name: "Inventory Service"
+  #   description: "Go gRPC inventory management service"
+  #   github_org: myorg
+  #   github_repo: inventory-service
+  #   default_branch: main
+  #   language: go
+  #   environment: production
+  #   observability_mode: db
+  #   log_path: /var/log/inventory-service/app.log
+  #   datadog: null
+  #   chaos_endpoint: null

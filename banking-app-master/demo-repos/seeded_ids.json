@@ -1,5 +1,5 @@
 {
-  "payment-service": "08af5c0a-ed30-4f46-9b6b-a7c5a2ae49a3",
-  "order-service": "9308ac37-db63-4cb6-9553-2326ba33580f",
-  "notification-service": "ad8e2d5b-fcaa-4c45-9e81-d1dc8bb8490f"
+  "payment-service": "84b0a8c0-9841-45df-ad0b-b94a81a2cd23",
+  "order-service": "b3e7285b-373b-4303-9fd0-cb92df031fbd",
+  "notification-service": "2f242f33-e980-4eae-9325-bb36a7f7ba5d"
 }

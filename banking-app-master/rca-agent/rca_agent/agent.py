@@ -27,8 +27,9 @@ import anthropic
 
 from .cache import read_cache, write_cache, append_rca_history
 from .config import settings
-from .db import execute
+from .db import execute, log_token_usage
 from .dependency_memory import read_dependency_memory, write_dependency_memory
+from .token_pricing import compute_cost
 from .github_tools import (
     get_commit_diff,
     get_commits_since,
@@ -534,6 +535,27 @@ class RCAAgent:
                 messages=messages,
             )
 
+            # Record real token counts from the API response
+            try:
+                u = response.usage
+                cache_r = getattr(u, "cache_read_input_tokens", 0) or 0
+                cache_w = getattr(u, "cache_creation_input_tokens", 0) or 0
+                log_token_usage(
+                    model=settings.model,
+                    source="rca_agent",
+                    input_tokens=u.input_tokens,
+                    output_tokens=u.output_tokens,
+                    error_log_id=error_log_id,
+                    cache_read_tokens=cache_r,
+                    cache_creation_tokens=cache_w,
+                    estimated_cost_usd=compute_cost(
+                        settings.model, u.input_tokens, u.output_tokens, cache_r, cache_w
+                    ),
+                    iteration_num=iterations,
+                )
+            except Exception:
+                pass  # never crash the agent on logging failures
+
             # Append assistant turn
             messages.append({"role": "assistant", "content": response.content})
 
@@ -753,6 +775,11 @@ class RCAAgent:
                 repo_key = f"{org}/{repo}"
                 if repo_key not in repos_investigated:
                     repos_investigated.append(repo_key)
+                # Truncate large files to keep context window manageable
+                content = result.get("content", "")
+                if len(content) > 4000:
+                    result = dict(result)
+                    result["content"] = content[:4000] + f"\n... [truncated, {len(content)} chars total]"
             return result
 
         if name == "list_repo_files":
@@ -784,6 +811,11 @@ class RCAAgent:
                 repo_key = f"{org}/{repo}"
                 if repo_key not in repos_investigated:
                     repos_investigated.append(repo_key)
+                # Truncate oversized patches to keep context window manageable
+                for f in result.get("files", []):
+                    patch = f.get("patch", "")
+                    if len(patch) > 2000:
+                        f["patch"] = patch[:2000] + f"\n... [truncated, {len(patch)} chars total]"
             return result
 
         if name == "get_commits_since":

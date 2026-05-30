@@ -2,14 +2,8 @@
 Error Ingestion Agent — Configuration
 Reads all settings from environment variables (12-factor style).
 
-Modes:
-  db             — File-watcher: tails LOG_FILE_PATH for new error lines.
-  datadog        — Webhook receiver: FastAPI on WEBHOOK_PORT, receives Datadog
-                   monitor alerts via POST /webhook/datadog (or /rca/ingest/datadog).
-  datadog_poll   — Datadog Logs API poller: polls for new error events on a
-                   configurable interval. Service list is driven by projects.yaml.
-                   Requires DD_API_KEY, DD_APP_KEY. Stateless except for the
-                   cursor stored in service_context_cache.
+Responsibility: watch log files, detect errors, run Gemini analysis, store to MySQL.
+Datadog log shipping is handled by the dedicated dd-agent service — not here.
 """
 from pydantic_settings import BaseSettings
 from typing import Literal
@@ -22,35 +16,32 @@ class Settings(BaseSettings):
     # Google Gemini
     gemini_api_key: str = ""
 
-    # Operating mode
+    # Operating mode (startup default — overrideable at runtime via control API)
     mode: Literal["db", "datadog", "datadog_poll"] = "db"
 
-    # Log file path (mode=db only)
-    log_file_path: str = "/var/log/banking-app/app.log"
+    # Log files to watch (comma-separated paths)
+    log_file_paths: str = "/var/log/banking-app/app.log"
 
-    # Service identification (used by mode=db and mode=datadog only).
-    # mode=datadog_poll reads service names from projects.yaml instead.
+    # Fallback service name when a log line has no embedded service identifier
     service_name: str = "banking-app"
     environment: str = "production"
 
-    # Polling interval (mode=db file-check cadence; mode=datadog_poll API call cadence)
-    poll_interval_seconds: int = 30
-    webhook_port: int = 8001
-
-    # ── Datadog poll mode ─────────────────────────────────────────────────────
+    # ── Datadog credentials (used by datadog_poll mode) ───────────────────────
     dd_api_key: str = ""
     dd_app_key: str = ""
-    # Datadog site: datadoghq.com (US1), datadoghq.eu (EU1), us3.datadoghq.com (US3)
-    dd_site: str = "datadoghq.com"
-    # On first poll (no cursor stored), look back this many hours to avoid
-    # replaying all historical logs on fresh deploy.
+    dd_site: str = "us5.datadoghq.com"
+
+    # ── Datadog poller tuning ─────────────────────────────────────────────────
+    poll_interval_seconds: int = 30
+    # How far back to fetch on first poll (no cursor stored yet)
     dd_initial_lookback_hours: int = 1
-    # Path to projects.yaml inside the container (baked in via Dockerfile COPY).
-    # Override for local development: PROJECTS_YAML_PATH=../projects.yaml
+    # Path to projects.yaml inside the container
     projects_yaml_path: str = "/app/projects.yaml"
 
     class Config:
-        env_file = ".env"
+        # Search root → banking-app-master → local .env (for local dev outside Docker).
+        # In Docker, env vars are injected by docker-compose and take precedence.
+        env_file = ("../../.env", "../.env", ".env")
         env_file_encoding = "utf-8"
         case_sensitive = False
 

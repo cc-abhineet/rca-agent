@@ -68,8 +68,28 @@ async def get_connection():
         yield conn
 
 
+_TOKEN_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS token_usage (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    error_log_id     VARCHAR(36)       DEFAULT NULL,
+    model            VARCHAR(100)      NOT NULL,
+    source           VARCHAR(50)       NOT NULL,
+    input_tokens     INT               NOT NULL DEFAULT 0,
+    output_tokens    INT               NOT NULL DEFAULT 0,
+    cache_read_tokens     INT          NOT NULL DEFAULT 0,
+    cache_creation_tokens INT          NOT NULL DEFAULT 0,
+    estimated_cost_usd DECIMAL(12,8)   NOT NULL DEFAULT 0,
+    iteration_num    INT               DEFAULT NULL,
+    created_at       DATETIME          DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tu_error_log (error_log_id),
+    INDEX idx_tu_model     (model),
+    INDEX idx_tu_created   (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
 async def ensure_table() -> None:
-    """Verify error_logs table exists (created by rca-agent alembic migrations)."""
+    """Verify error_logs table exists and create token_usage if needed."""
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SHOW TABLES LIKE 'error_logs'")
@@ -80,6 +100,42 @@ async def ensure_table() -> None:
                 )
             else:
                 logger.info("error_logs table ready")
+            # Create token_usage table (idempotent)
+            await cur.execute(_TOKEN_TABLE_DDL)
+        await conn.commit()
+        logger.info("token_usage table ready")
+
+
+def log_token_usage_sync(
+    model: str,
+    source: str,
+    input_tokens: int,
+    output_tokens: int,
+    estimated_cost_usd: float = 0.0,
+) -> None:
+    """Sync PyMySQL token logging — called from synchronous analyze_node."""
+    try:
+        import pymysql
+        dsn = _parse_dsn(settings.database_url)
+        conn = pymysql.connect(
+            host=dsn["host"],
+            port=dsn["port"],
+            user=dsn["user"],
+            password=dsn["password"],
+            database=dsn["db"],
+            charset="utf8mb4",
+        )
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO token_usage
+                           (model, source, input_tokens, output_tokens, estimated_cost_usd)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (model, source, input_tokens, output_tokens, estimated_cost_usd),
+                )
+            conn.commit()
+    except Exception as exc:
+        logger.debug("Gemini token log failed (non-critical): %s", exc)
 
 
 async def read_cursor(service_name: str) -> Optional[str]:
@@ -148,6 +204,10 @@ async def insert_incident(
     raw_log: str,
     source: str,
     occurred_at: Optional[datetime] = None,
+    gemini_category: Optional[str] = None,
+    gemini_analysis: Optional[str] = None,
+    gemini_suggestions: Optional[str] = None,
+    risk_level: Optional[str] = None,
 ) -> str:
     """
     Insert a new error into error_logs (the unified table read by the RCA agent).
@@ -158,7 +218,6 @@ async def insert_incident(
     # stack_trace column is JSON in error_logs — wrap plain text into a list
     stack_trace_json: list = []
     if stack_trace:
-        # Try to split into individual frame lines for readability
         frames = [line.strip() for line in stack_trace.splitlines() if line.strip()]
         stack_trace_json = [{"text": f} for f in frames] if frames else [{"text": stack_trace}]
 
@@ -170,8 +229,9 @@ async def insert_incident(
                 """
                 INSERT INTO error_logs
                     (id, service_name, environment, error_type, error_message,
-                     stack_trace, severity, occurred_at, metadata, rca_status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+                     stack_trace, severity, occurred_at, metadata, rca_status,
+                     gemini_category, gemini_analysis, gemini_suggestions, risk_level)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s, %s, %s)
                 """,
                 (
                     row_id,
@@ -183,12 +243,16 @@ async def insert_incident(
                     severity,
                     occurred_at or datetime.utcnow(),
                     json.dumps(metadata),
+                    gemini_category,
+                    gemini_analysis,
+                    gemini_suggestions,
+                    risk_level,
                 ),
             )
         await conn.commit()
 
     logger.info(
-        "Incident #%s inserted — service=%s severity=%s source=%s",
-        row_id[:8], service_name, severity, source,
+        "Incident #%s inserted — service=%s risk_level=%s source=%s",
+        row_id[:8], service_name, risk_level or "?", source,
     )
     return row_id

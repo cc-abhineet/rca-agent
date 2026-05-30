@@ -2,16 +2,19 @@
 """
 add_service_map.py — Register services in the rca-agent's service_repo_map table.
 
-Run this once after `alembic upgrade head` to tell the rca-agent which GitHub
-repos back each service.  Idempotent: re-running it updates existing rows
-rather than inserting duplicates.
+By default reads ALL services from banking-app-master/projects.yaml and
+registers them.  To add a new service to the platform, add it to projects.yaml
+and re-run this script — no code changes needed.
+
+Run this once after `alembic upgrade head`.  Idempotent: re-running updates
+existing rows instead of inserting duplicates.
 
 Usage
 -----
-  # Register the default cross-service demo (pricing-service + order-service):
+  # Register all services defined in projects.yaml (default):
   python add_service_map.py
 
-  # Register a custom service:
+  # Register a single custom service without editing projects.yaml:
   python add_service_map.py \\
       --service   my-service \\
       --org       my-github-org \\
@@ -20,11 +23,11 @@ Usage
       --language  Python \\
       --notes     "Payments microservice"
 
-  # Override the DB URL (defaults to DATABASE_URL env var or banking-app-master/.env):
+  # Override the DB URL:
   python add_service_map.py --db-url "mysql+pymysql://root:pass@localhost:3306/rca_db"
 
 Dependencies (already in rca-agent requirements):
-  pip install pymysql python-dotenv sqlalchemy
+  pip install pymysql python-dotenv sqlalchemy pyyaml
 """
 
 import argparse
@@ -99,43 +102,44 @@ def upsert_service(
     print(f"  ✓ {service_name} → {github_org}/{github_repo} ({default_branch})")
 
 
-# ── Default entries for the cross-service demo ───────────────────────────────
+# ── Load services from projects.yaml ─────────────────────────────────────────
 
-DEFAULT_SERVICES = [
-    {
-        "service_name":   "banking-app",
-        "github_org":     "oscorpAI",
-        "github_repo":    "banking-app",
-        "default_branch": "main",
-        "language":       "Java",
-        "notes":          "Spring Boot banking application (port 8080)",
-    },
-    {
-        "service_name":   "pricing-service",
-        "github_org":     "oscorpAI",
-        "github_repo":    "pricing-service",
-        "default_branch": "main",
-        "language":       "Java",
-        "notes":          (
-            "Spring Boot pricing service (port 8081). "
-            "v2.1.0 renamed 'discount' field to 'discountRate' — "
-            "order-service has not been updated (Bug A)."
-        ),
-    },
-    {
-        "service_name":   "order-service",
-        "github_org":     "oscorpAI",
-        "github_repo":    "order-service",
-        "default_branch": "main",
-        "language":       "Java",
-        "notes":          (
-            "Spring Boot order service (port 8082). "
-            "Calls pricing-service. "
-            "Bug A: NPE from stale 'discount' field. "
-            "Bug B: off-by-one in resolveQuantity (commit d3adb33f)."
-        ),
-    },
-]
+_PROJECTS_YAML = Path(__file__).parent / "banking-app-master" / "projects.yaml"
+
+
+def _load_from_projects_yaml() -> list[dict]:
+    """
+    Read banking-app-master/projects.yaml and return a list of service dicts
+    ready for upsert_service().  Every project entry in the yaml becomes a row.
+    """
+    try:
+        import yaml
+    except ImportError:
+        print("WARNING: pyyaml not installed — skipping projects.yaml load.")
+        print("         Install with: pip install pyyaml")
+        return []
+
+    if not _PROJECTS_YAML.exists():
+        print(f"WARNING: projects.yaml not found at {_PROJECTS_YAML}")
+        return []
+
+    with open(_PROJECTS_YAML) as fh:
+        data = yaml.safe_load(fh)
+
+    services = []
+    for p in data.get("projects", []):
+        svc_id = p.get("id") or p.get("name")
+        if not svc_id:
+            continue
+        services.append({
+            "service_name":   svc_id,
+            "github_org":     p.get("github_org", ""),
+            "github_repo":    p.get("github_repo", svc_id),
+            "default_branch": p.get("default_branch", "main"),
+            "language":       (p.get("language") or "unknown").capitalize(),
+            "notes":          p.get("description", ""),
+        })
+    return services
 
 
 def main() -> None:
@@ -171,9 +175,13 @@ def main() -> None:
             notes=args.notes,
         )
     else:
-        # Default: register all cross-service demo services
-        print("\nRegistering default cross-service demo services…")
-        for svc in DEFAULT_SERVICES:
+        # Default: register all services from projects.yaml
+        services = _load_from_projects_yaml()
+        if not services:
+            print("ERROR: No services found in projects.yaml and no --service flag given.")
+            sys.exit(1)
+        print(f"\nRegistering {len(services)} service(s) from projects.yaml…")
+        for svc in services:
             upsert_service(engine, **svc)
 
     print("\nDone. The rca-agent will now resolve these services to their GitHub repos.")

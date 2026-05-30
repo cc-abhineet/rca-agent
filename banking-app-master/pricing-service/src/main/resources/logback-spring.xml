@@ -20,11 +20,11 @@
         </encoder>
     </appender>
 
-    <!-- File: plain text — readable by error-ingestion-agent log_parser.py -->
+    <!-- Plain text — readable by error-ingestion-agent log_parser.py -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOGGING_FILE_NAME:-/var/log/pricing-service/app.log}</file>
+        <file>${LOGGING_FILE_NAME:-/var/log/banking-app/app.log}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOGGING_FILE_NAME:-/var/log/pricing-service/app}.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${LOGGING_FILE_NAME:-/var/log/banking-app/app}.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>7</maxHistory>
         </rollingPolicy>
         <encoder>
@@ -32,9 +32,22 @@
         </encoder>
     </appender>
 
+    <!-- JSON — read by the Datadog agent; immediateFlush ensures no buffering lag -->
+    <appender name="DATADOG_JSON" class="ch.qos.logback.core.FileAppender">
+        <file>/var/log/banking-app/pricing-service.json.log</file>
+        <immediateFlush>true</immediateFlush>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <stackTrace>error.stack</stackTrace>
+            </fieldNames>
+            <customFields>{"service":"pricing-service","ddsource":"java","env":"dev"}</customFields>
+        </encoder>
+    </appender>
+
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
+        <appender-ref ref="DATADOG_JSON"/>
     </root>
 
     <logger name="com.demo.pricing" level="DEBUG"/>

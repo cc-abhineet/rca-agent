@@ -12,7 +12,6 @@
       --surface: #1a1c2e;
       --surface2: #12131f;
       --border: #2d3148;
-      --border-bright: #3d4168;
       --text: #e2e8f0;
       --text-muted: #64748b;
       --text-dim: #475569;
@@ -30,8 +29,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-                   'Helvetica Neue', Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -42,49 +40,40 @@
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       padding: 0 24px;
-      height: 56px;
+      height: 52px;
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       flex-shrink: 0;
     }
-    .nav-logo {
-      font-size: 1.1rem;
-      font-weight: 800;
-      color: var(--accent-light);
-      letter-spacing: -.02em;
-    }
+    .nav-logo { font-size: 1rem; font-weight: 800; color: var(--accent-light); letter-spacing: -.02em; }
     .nav-logo span { color: var(--text-muted); font-weight: 400; }
     .nav-badge {
-      background: rgba(99,102,241,.15);
-      color: var(--accent-light);
-      border: 1px solid rgba(99,102,241,.3);
-      padding: 2px 10px;
-      border-radius: 20px;
-      font-size: .72rem;
-      font-weight: 700;
-      letter-spacing: .05em;
-      text-transform: uppercase;
+      background: rgba(99,102,241,.15); color: var(--accent-light);
+      border: 1px solid rgba(99,102,241,.3); padding: 2px 9px;
+      border-radius: 20px; font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
     }
     .nav-spacer { flex: 1; }
-    .nav-hint {
-      color: var(--text-dim);
-      font-size: .78rem;
+    .nav-hint { color: var(--text-dim); font-size: .76rem; }
+
+    /* ── Status chips in nav ── */
+    .nav-chips { display: flex; gap: 6px; align-items: center; }
+    .chip {
+      padding: 2px 8px; border-radius: 12px; font-size: .7rem; font-weight: 700;
+      border: 1px solid; cursor: default;
     }
+    .chip-pending  { background: rgba(251,191,36,.1);  color: var(--yellow); border-color: rgba(251,191,36,.3); }
+    .chip-running  { background: rgba(96,165,250,.1);  color: var(--blue);   border-color: rgba(96,165,250,.3); }
+    .chip-done     { background: rgba(34,197,94,.1);   color: var(--green);  border-color: rgba(34,197,94,.3); }
+    .chip-failed   { background: rgba(239,68,68,.1);   color: var(--red);    border-color: rgba(239,68,68,.3); }
 
     /* ── Main layout ── */
     .main {
       flex: 1;
       display: grid;
-      grid-template-columns: 420px 1fr;
+      grid-template-columns: 400px 1fr;
       min-height: 0;
       overflow: hidden;
-    }
-
-    @media (max-width: 900px) {
-      .main { grid-template-columns: 1fr; }
-      .right-panel { display: none; }
-      .right-panel.visible { display: flex; }
     }
 
     /* ── Left panel ── */
@@ -96,282 +85,212 @@
       background: var(--surface2);
     }
 
-    .form-area {
-      padding: 20px;
+    /* -- Error list -- */
+    .error-list-section {
       border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      background: var(--surface);
-    }
-
-    .form-title {
-      font-size: .75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--text-muted);
-      margin-bottom: 14px;
-    }
-
-    .form-group { margin-bottom: 12px; }
-    .form-label {
-      display: block;
-      font-size: .78rem;
-      color: var(--text-muted);
-      margin-bottom: 5px;
-      font-weight: 600;
-    }
-
-    select, input[type="text"] {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      padding: 8px 12px;
-      font-size: .88rem;
-      outline: none;
-      transition: border-color .15s;
-      font-family: inherit;
-    }
-    select:focus, input[type="text"]:focus {
-      border-color: var(--accent);
-    }
-    select option { background: var(--surface); }
-
-    .run-btn {
-      width: 100%;
-      padding: 10px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: .92rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background .15s, transform .1s;
-      margin-top: 4px;
-      letter-spacing: .02em;
-    }
-    .run-btn:hover:not(:disabled) { background: #4f46e5; }
-    .run-btn:active:not(:disabled) { transform: scale(.98); }
-    .run-btn:disabled {
-      background: #312e81;
-      color: #6366f1;
-      cursor: not-allowed;
-    }
-
-    .status-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      font-size: .78rem;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--text-dim);
-      flex-shrink: 0;
-    }
-    .status-dot.running {
-      background: var(--green);
-      animation: pulse 1s ease-in-out infinite;
-    }
-    .status-dot.done { background: var(--green); }
-    .status-dot.error { background: var(--red); }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: .5; transform: scale(.85); }
-    }
-
-    /* ── Trace feed ── */
-    .trace-feed {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px 16px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-      font-size: .78rem;
+      flex-shrink: 0;
+      max-height: 340px;
     }
-    .trace-feed::-webkit-scrollbar { width: 4px; }
-    .trace-feed::-webkit-scrollbar-track { background: transparent; }
+    .error-list-header {
+      padding: 10px 16px 8px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .error-list-title {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--text-muted);
+    }
+    .error-list-refresh {
+      margin-left: auto; font-size: .68rem; color: var(--text-dim); cursor: pointer;
+    }
+    .error-list-refresh:hover { color: var(--accent-light); }
+    .error-table-wrap { overflow-y: auto; flex: 1; }
+    .error-table {
+      width: 100%; border-collapse: collapse; font-size: .74rem;
+    }
+    .error-table th {
+      padding: 6px 10px; text-align: left; font-size: .67rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim);
+      background: var(--surface2); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 1;
+    }
+    .error-table td {
+      padding: 7px 10px; border-bottom: 1px solid rgba(45,49,72,.6);
+      vertical-align: middle; color: var(--text-muted);
+    }
+    .error-row {
+      cursor: pointer; transition: background .1s;
+    }
+    .error-row:hover { background: rgba(99,102,241,.07); }
+    .error-row.selected { background: rgba(99,102,241,.12); }
+    .error-row td:first-child { color: var(--text); font-weight: 600; }
+
+    .status-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .sb-pending    { background: rgba(251,191,36,.15); color: var(--yellow); }
+    .sb-in_progress{ background: rgba(96,165,250,.15); color: var(--blue);   }
+    .sb-completed  { background: rgba(34,197,94,.15);  color: var(--green);  }
+    .sb-failed     { background: rgba(239,68,68,.15);  color: var(--red);    }
+
+    .sev-CRITICAL { color: var(--red); }
+    .sev-HIGH     { color: var(--orange); }
+    .sev-MEDIUM   { color: var(--yellow); }
+    .sev-LOW      { color: var(--green); }
+    .sev-ERROR    { color: var(--red); }
+    .sev-WARN     { color: var(--yellow); }
+
+    .empty-list {
+      padding: 20px; text-align: center; color: var(--text-dim); font-size: .8rem;
+    }
+
+    /* -- Run form -- */
+    .form-area {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface);
+    }
+    .form-title {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text-muted); margin-bottom: 10px;
+    }
+    .form-row { display: flex; gap: 8px; align-items: flex-end; }
+    .form-field { flex: 1; }
+    .form-label {
+      display: block; font-size: .72rem; color: var(--text-dim); margin-bottom: 4px; font-weight: 600;
+    }
+    input[type="text"] {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 7px 10px;
+      font-size: .82rem; outline: none; transition: border-color .15s; font-family: monospace;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    .run-btn {
+      padding: 8px 16px; background: var(--accent); color: #fff; border: none;
+      border-radius: 7px; font-size: .84rem; font-weight: 700; cursor: pointer;
+      transition: background .15s, transform .1s; white-space: nowrap;
+      letter-spacing: .02em; flex-shrink: 0;
+    }
+    .run-btn:hover:not(:disabled) { background: #4f46e5; }
+    .run-btn:active:not(:disabled) { transform: scale(.97); }
+    .run-btn:disabled { background: #312e81; color: #6366f1; cursor: not-allowed; }
+
+    /* -- Status bar -- */
+    .status-bar {
+      display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      font-size: .74rem; color: var(--text-muted); flex-shrink: 0;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-dim); flex-shrink: 0;
+    }
+    .status-dot.running { background: var(--green); animation: pulse 1s ease-in-out infinite; }
+    .status-dot.done    { background: var(--green); }
+    .status-dot.error   { background: var(--red); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .5; transform: scale(.85); }
+    }
+
+    /* -- Trace feed -- */
+    .trace-feed {
+      flex: 1; overflow-y: auto; padding: 10px 14px;
+      display: flex; flex-direction: column; gap: 3px;
+      font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: .74rem;
+    }
+    .trace-feed::-webkit-scrollbar { width: 3px; }
     .trace-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
     .trace-empty {
-      color: var(--text-dim);
-      text-align: center;
-      padding: 40px 20px;
-      font-family: -apple-system, sans-serif;
-      font-size: .85rem;
-      line-height: 1.7;
+      color: var(--text-dim); text-align: center; padding: 30px 16px;
+      font-family: -apple-system, sans-serif; font-size: .82rem; line-height: 1.7;
     }
-    .trace-empty .hint {
-      font-size: 2rem;
-      margin-bottom: 12px;
-    }
+    .trace-empty .hint { font-size: 1.8rem; margin-bottom: 10px; }
 
     .trace-event {
-      display: flex;
-      gap: 10px;
-      padding: 6px 10px;
-      border-radius: 6px;
-      line-height: 1.5;
-      animation: fadeSlideIn .25s ease-out both;
+      display: flex; gap: 8px; padding: 5px 8px; border-radius: 5px;
+      line-height: 1.5; animation: fadeSlideIn .2s ease-out both;
       border-left: 2px solid transparent;
     }
-
     @keyframes fadeSlideIn {
-      from { opacity: 0; transform: translateY(6px); }
+      from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-
-    .trace-ts {
-      color: var(--text-dim);
-      font-size: .7rem;
-      white-space: nowrap;
-      flex-shrink: 0;
-      padding-top: 1px;
-    }
-
-    .trace-icon { font-size: 1em; flex-shrink: 0; }
-
-    .trace-text {
-      flex: 1;
-      word-break: break-word;
-    }
-
-    .trace-reasoning {
-      color: var(--gray);
-      font-style: italic;
-      font-family: -apple-system, sans-serif;
-      font-size: .75rem;
-    }
+    .trace-ts { color: var(--text-dim); font-size: .66rem; white-space: nowrap; flex-shrink: 0; padding-top: 2px; }
+    .trace-icon { font-size: .9em; flex-shrink: 0; }
+    .trace-text { flex: 1; word-break: break-word; }
+    .trace-reasoning { color: var(--gray); font-style: italic; font-family: -apple-system, sans-serif; font-size: .72rem; }
     .trace-reasoning .expand-btn {
-      color: var(--accent-light);
-      cursor: pointer;
-      text-decoration: underline;
-      font-style: normal;
-      margin-left: 4px;
-      font-size: .7rem;
+      color: var(--accent-light); cursor: pointer; text-decoration: underline;
+      font-style: normal; margin-left: 4px; font-size: .68rem;
     }
 
-    /* Event type styles */
-    .ev-start    { background: rgba(96,165,250,.06); border-left-color: var(--blue); }
-    .ev-tool_call{ background: rgba(168,85,247,.06); border-left-color: var(--purple); }
-    .ev-tool_result { background: rgba(34,197,94,.06); border-left-color: var(--green); }
-    .ev-cache_hit{ background: rgba(251,191,36,.06); border-left-color: var(--yellow); }
-    .ev-reasoning{ background: rgba(148,163,184,.04); border-left-color: var(--border); }
-    .ev-sub_agent{ background: rgba(249,115,22,.06); border-left-color: var(--orange); }
-    .ev-complete { background: rgba(34,197,94,.1);  border-left-color: var(--green); }
-    .ev-error    { background: rgba(239,68,68,.08); border-left-color: var(--red); }
-    .ev-done     { background: rgba(34,197,94,.08); border-left-color: var(--green); }
+    .ev-start      { background: rgba(96,165,250,.06);  border-left-color: var(--blue); }
+    .ev-tool_call  { background: rgba(168,85,247,.06);  border-left-color: var(--purple); }
+    .ev-tool_result{ background: rgba(34,197,94,.06);   border-left-color: var(--green); }
+    .ev-cache_hit  { background: rgba(251,191,36,.06);  border-left-color: var(--yellow); }
+    .ev-reasoning  { background: rgba(148,163,184,.04); border-left-color: var(--border); }
+    .ev-sub_agent  { background: rgba(249,115,22,.06);  border-left-color: var(--orange); }
+    .ev-complete   { background: rgba(34,197,94,.1);    border-left-color: var(--green); }
+    .ev-error      { background: rgba(239,68,68,.08);   border-left-color: var(--red); }
+    .ev-done       { background: rgba(34,197,94,.08);   border-left-color: var(--green); }
 
-    .col-blue    { color: var(--blue); }
-    .col-purple  { color: var(--purple); }
-    .col-green   { color: var(--green); }
-    .col-yellow  { color: var(--yellow); }
-    .col-orange  { color: var(--orange); }
-    .col-red     { color: var(--red); }
-    .col-gray    { color: var(--gray); }
-    .col-accent  { color: var(--accent-light); }
-    .fw-bold     { font-weight: 700; }
+    .col-blue   { color: var(--blue); }
+    .col-purple { color: var(--purple); }
+    .col-green  { color: var(--green); }
+    .col-yellow { color: var(--yellow); }
+    .col-orange { color: var(--orange); }
+    .col-red    { color: var(--red); }
+    .col-gray   { color: var(--gray); }
+    .col-accent { color: var(--accent-light); }
+    .fw-bold    { font-weight: 700; }
 
     /* ── Right panel ── */
-    .right-panel {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: var(--bg);
-    }
+    .right-panel { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
 
     .report-header {
-      padding: 14px 24px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-shrink: 0;
+      padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface);
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
     }
     .report-header-title {
-      font-size: .75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--text-muted);
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text-muted);
     }
-    .report-header-status { color: var(--text-dim); font-size: .78rem; }
+    .report-header-status { color: var(--text-dim); font-size: .76rem; }
 
-    .report-frame {
-      flex: 1;
-      overflow: hidden;
-      position: relative;
-    }
-
+    .report-frame { flex: 1; overflow: hidden; position: relative; }
     .report-placeholder {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--text-dim);
-      gap: 16px;
-      padding: 40px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; color: var(--text-dim); gap: 14px; padding: 40px;
     }
     .report-placeholder .big-icon {
-      font-size: 3rem;
-      animation: breathe 2.5s ease-in-out infinite;
+      font-size: 2.5rem; animation: breathe 2.5s ease-in-out infinite;
     }
     @keyframes breathe {
       0%, 100% { opacity: .4; transform: scale(1); }
       50%       { opacity: .8; transform: scale(1.05); }
     }
-    .report-placeholder p {
-      font-size: .9rem;
-      text-align: center;
-      line-height: 1.7;
-      max-width: 300px;
-    }
+    .report-placeholder p { font-size: .88rem; text-align: center; line-height: 1.7; max-width: 280px; }
 
-    .report-iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: none;
-      background: #0f1117;
-    }
-    .report-iframe.visible {
-      display: block;
-      animation: fadeIn .5s ease-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
-    }
+    .report-iframe { width: 100%; height: 100%; border: none; display: none; background: #0f1117; }
+    .report-iframe.visible { display: block; animation: fadeIn .4s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    /* open-report link strip */
     .report-link-strip {
-      padding: 8px 24px;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      display: none;
-      align-items: center;
-      gap: 12px;
-      flex-shrink: 0;
+      padding: 7px 20px; background: var(--surface); border-top: 1px solid var(--border);
+      display: none; align-items: center; gap: 12px; flex-shrink: 0;
     }
     .report-link-strip.visible { display: flex; }
-    .report-link-strip a {
-      color: var(--accent-light);
-      font-size: .78rem;
-      text-decoration: none;
-    }
+    .report-link-strip a { color: var(--accent-light); font-size: .76rem; text-decoration: none; }
     .report-link-strip a:hover { text-decoration: underline; }
   </style>
 </head>
@@ -381,8 +300,14 @@
 <nav class="nav">
   <div class="nav-logo">🔍 rca-agent <span>/ live demo</span></div>
   <div class="nav-badge">Preview</div>
+  <div class="nav-chips" id="nav-chips">
+    <span class="chip chip-pending" id="chip-pending" title="Pending">0 pending</span>
+    <span class="chip chip-running" id="chip-running" title="In Progress">0 running</span>
+    <span class="chip chip-done"    id="chip-done"    title="Completed">0 done</span>
+    <span class="chip chip-failed"  id="chip-failed"  title="Failed">0 failed</span>
+  </div>
   <div class="nav-spacer"></div>
-  <div class="nav-hint">Pick a scenario → click Run RCA → watch the agent think</div>
+  <div class="nav-hint">Select an error → Run RCA → watch Claude investigate</div>
 </nav>
 
 <!-- Main -->
@@ -391,41 +316,55 @@
   <!-- LEFT PANEL -->
   <div class="left-panel">
 
-    <!-- Form -->
+    <!-- Error list -->
+    <div class="error-list-section">
+      <div class="error-list-header">
+        <span class="error-list-title">Recent Errors</span>
+        <span class="error-list-refresh" onclick="loadErrors()" title="Refresh">↻ refresh</span>
+      </div>
+      <div class="error-table-wrap">
+        <table class="error-table">
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Error Type</th>
+              <th>Status</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="error-tbody">
+            <tr><td colspan="4" class="empty-list">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Run form -->
     <div class="form-area">
-      <div class="form-title">Trigger RCA Analysis</div>
-
-      <div class="form-group">
-        <label class="form-label" for="scenario-select">Demo Scenario</label>
-        <select id="scenario-select">
-          <option value="">Loading scenarios…</option>
-        </select>
+      <div class="form-title">Run RCA Analysis</div>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label" for="error-log-id">Selected Error Log ID</label>
+          <input type="text" id="error-log-id" placeholder="Click a row above to select…" readonly
+                 style="cursor:default;color:var(--text-muted);">
+        </div>
+        <button class="run-btn" id="run-btn" onclick="startRCA()">🚀 Run RCA</button>
       </div>
-
-      <div class="form-group">
-        <label class="form-label" for="error-log-id">Error Log ID</label>
-        <input type="text" id="error-log-id" placeholder="UUID auto-filled from scenario" readonly
-               style="cursor:default;color:var(--text-muted);">
-      </div>
-
-      <button class="run-btn" id="run-btn" onclick="startRCA()">
-        🚀 Run RCA
-      </button>
     </div>
 
     <!-- Status bar -->
     <div class="status-bar">
       <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">Ready</span>
+      <span id="status-text">Select an error from the list above</span>
     </div>
 
     <!-- Trace feed -->
     <div class="trace-feed" id="trace-feed">
       <div class="trace-empty">
         <div class="hint">🤖</div>
-        <p>Select a demo scenario above and click <strong style="color:var(--accent-light)">Run RCA</strong> to watch the agent investigate in real time.</p>
-        <p style="margin-top:10px;font-size:.78rem;color:var(--text-dim);">
-          Each tool call, cache hit, and Claude's reasoning will appear here as it happens.
+        <p>Click a row in the error list, then click <strong style="color:var(--accent-light)">Run RCA</strong>.</p>
+        <p style="margin-top:8px;font-size:.74rem;color:var(--text-dim);">
+          Each tool call, cache hit, and Claude's reasoning will stream here.
         </p>
       </div>
     </div>
@@ -443,12 +382,13 @@
       <div class="report-placeholder" id="report-placeholder">
         <div class="big-icon">📋</div>
         <p>The full RCA report will appear here once the agent completes its analysis.</p>
+        <p style="margin-top:6px;font-size:.76rem;">You can also click a <span style="color:var(--green);font-weight:700">completed</span> error to view its existing report.</p>
       </div>
       <iframe class="report-iframe" id="report-iframe" title="RCA Report"></iframe>
     </div>
 
     <div class="report-link-strip" id="report-link-strip">
-      <span style="color:var(--text-muted);font-size:.78rem;">Report ready</span>
+      <span style="color:var(--text-muted);font-size:.76rem;">Report ready</span>
       <a id="report-open-link" href="#" target="_blank">Open in new tab ↗</a>
       <a id="report-json-link" href="#" target="_blank">View JSON ↗</a>
     </div>
@@ -458,73 +398,94 @@
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────────
-let currentEventSource = null;
 let currentErrorLogId = null;
-let currentRcaId = null;
 let eventCount = 0;
+let autoRefreshTimer = null;
+let selectedRow = null;
 
-// ── Load scenarios on startup ──────────────────────────────────────────────────
-async function loadScenarios() {
-  const sel = document.getElementById('scenario-select');
+// ── Error List ─────────────────────────────────────────────────────────────────
+async function loadErrors() {
   try {
-    const res = await fetch('/demo/scenarios');
+    const res = await fetch('/demo/errors');
     const data = await res.json();
-    const scenarios = data.scenarios || {};
-    sel.innerHTML = '';
-    const labels = {
-      'payment-service': '💳 payment-service — AttributeError (critical)',
-      'order-service':   '📦 order-service — PydanticUserError (critical)',
-      'notification-service': '📨 notification-service — KeyError (high, sub-agent)',
-    };
-    let first = true;
-    for (const [svc, id] of Object.entries(scenarios)) {
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = labels[svc] || svc;
-      if (first) {
-        document.getElementById('error-log-id').value = id;
-        first = false;
-      }
-      sel.appendChild(opt);
-    }
-    if (!Object.keys(scenarios).length) {
-      sel.innerHTML = '<option value="">No scenarios found — run demo_seed_data.py first</option>';
-    }
+    renderErrorList(data.errors || []);
+    updateChips(data.errors || []);
   } catch (e) {
-    sel.innerHTML = '<option value="">Error loading scenarios: ' + e.message + '</option>';
+    document.getElementById('error-tbody').innerHTML =
+      `<tr><td colspan="4" class="empty-list" style="color:var(--red)">Failed to load: ${e.message}</td></tr>`;
   }
 }
 
-document.getElementById('scenario-select').addEventListener('change', function() {
-  document.getElementById('error-log-id').value = this.value;
-});
+function renderErrorList(errors) {
+  const tbody = document.getElementById('error-tbody');
+  if (!errors.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-list">No errors yet — trigger a chaos scenario from the log-viewer UIs (port 5000–5002), or run demo_seed_data.py</td></tr>';
+    return;
+  }
+  tbody.innerHTML = errors.map(e => {
+    const sevCls = `sev-${e.severity.toUpperCase()}`;
+    const badgeCls = `sb-${e.rca_status}`;
+    const badgeLabel = e.rca_status === 'in_progress' ? 'running' : e.rca_status;
+    const time = e.occurred_at ? e.occurred_at.slice(5, 16).replace('T', ' ') : '';
+    const isSelected = e.id === currentErrorLogId;
+    return `<tr class="error-row${isSelected ? ' selected' : ''}" onclick="selectError('${e.id}', this)" data-id="${e.id}">
+      <td>${escHtml(e.service_name)}</td>
+      <td class="${sevCls}" style="font-size:.7rem">${escHtml(e.error_type)}</td>
+      <td><span class="status-badge ${badgeCls}">${badgeLabel}</span></td>
+      <td style="font-size:.68rem;white-space:nowrap">${time}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateChips(errors) {
+  const counts = { pending: 0, in_progress: 0, completed: 0, failed: 0 };
+  errors.forEach(e => { if (counts[e.rca_status] !== undefined) counts[e.rca_status]++; });
+  document.getElementById('chip-pending').textContent = `${counts.pending} pending`;
+  document.getElementById('chip-running').textContent = `${counts.in_progress} running`;
+  document.getElementById('chip-done').textContent    = `${counts.completed} done`;
+  document.getElementById('chip-failed').textContent  = `${counts.failed} failed`;
+}
+
+function selectError(id, row) {
+  currentErrorLogId = id;
+  document.getElementById('error-log-id').value = id;
+
+  // Highlight selected row
+  document.querySelectorAll('.error-row').forEach(r => r.classList.remove('selected'));
+  row.classList.add('selected');
+
+  // If this error is already completed, load its report immediately
+  const status = row.querySelector('.status-badge').textContent.trim();
+  if (status === 'completed') {
+    showReport({ error_log_id: id });
+    setStatus('done', 'Report loaded from DB');
+  }
+}
+
+// Auto-refresh every 12 seconds
+function startAutoRefresh() {
+  autoRefreshTimer = setInterval(loadErrors, 12000);
+}
 
 // ── Trace event rendering ──────────────────────────────────────────────────────
 const EVENT_CONFIG = {
-  start:       { icon: '🚀', cls: 'col-blue',   evCls: 'ev-start' },
-  tool_call:   { icon: '🔧', cls: 'col-purple',  evCls: 'ev-tool_call' },
-  tool_result: { icon: '✅', cls: 'col-green',   evCls: 'ev-tool_result' },
-  cache_hit:   { icon: '⚡', cls: 'col-yellow',  evCls: 'ev-cache_hit' },
-  reasoning:   { icon: '💭', cls: 'col-gray',    evCls: 'ev-reasoning' },
-  sub_agent:   { icon: '🤖', cls: 'col-orange',  evCls: 'ev-sub_agent' },
+  start:       { icon: '🚀', cls: 'col-blue',         evCls: 'ev-start' },
+  tool_call:   { icon: '🔧', cls: 'col-purple',        evCls: 'ev-tool_call' },
+  tool_result: { icon: '✅', cls: 'col-green',         evCls: 'ev-tool_result' },
+  cache_hit:   { icon: '⚡', cls: 'col-yellow',        evCls: 'ev-cache_hit' },
+  reasoning:   { icon: '💭', cls: 'col-gray',          evCls: 'ev-reasoning' },
+  sub_agent:   { icon: '🤖', cls: 'col-orange',        evCls: 'ev-sub_agent' },
   complete:    { icon: '🎯', cls: 'col-green fw-bold', evCls: 'ev-complete' },
   done:        { icon: '🎉', cls: 'col-green fw-bold', evCls: 'ev-done' },
-  error:       { icon: '❌', cls: 'col-red',     evCls: 'ev-error' },
+  error:       { icon: '❌', cls: 'col-red',           evCls: 'ev-error' },
 };
 
-function formatTs(isoStr) {
-  try {
-    const d = new Date(isoStr);
-    return d.toTimeString().slice(0, 8);
-  } catch { return '--:--:--'; }
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function formatTs(isoStr) {
+  try { return new Date(isoStr).toTimeString().slice(0, 8); } catch { return '--:--:--'; }
 }
 
 function buildEventText(ev) {
@@ -532,50 +493,39 @@ function buildEventText(ev) {
     case 'start':
       return `Starting RCA for <strong>${escHtml(ev.service)}</strong> `
            + `(<span style="color:var(--red)">${escHtml(ev.error_type)}</span>)`;
-
     case 'tool_call': {
       const inp = ev.input || {};
       let detail = '';
-      if (inp.path)   detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.path)}</code>`;
-      if (inp.query)  detail = ` · "${escHtml(inp.query)}"`;
-      if (inp.commit_sha) detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.commit_sha.slice(0,8))}</code>`;
-      if (inp.service_name) detail = ` · ${escHtml(inp.service_name)}`;
+      if (inp.path)        detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.path)}</code>`;
+      if (inp.query)       detail = ` · "${escHtml(inp.query)}"`;
+      if (inp.commit_sha)  detail = ` · <code style="color:var(--accent-light)">${escHtml(inp.commit_sha.slice(0,8))}</code>`;
+      if (inp.service_name)detail = ` · ${escHtml(inp.service_name)}`;
       return `Calling <strong style="color:var(--purple)">${escHtml(ev.tool)}</strong>${detail}`;
     }
-
     case 'tool_result':
       return escHtml(ev.summary || `${ev.tool} returned`);
-
     case 'cache_hit':
       return `Cache hit: <code style="color:var(--yellow)">${escHtml(ev.key)}</code>`;
-
     case 'reasoning': {
       const full = ev.text || '';
-      const truncLen = 220;
-      if (full.length <= truncLen) {
-        return `<span class="trace-reasoning">"${escHtml(full)}"</span>`;
-      }
+      const truncLen = 200;
+      if (full.length <= truncLen) return `<span class="trace-reasoning">"${escHtml(full)}"</span>`;
       const short = escHtml(full.slice(0, truncLen));
-      const rest = escHtml(full.slice(truncLen));
+      const rest  = escHtml(full.slice(truncLen));
       const uid = 'r' + Date.now() + Math.random().toString(36).slice(2,6);
       return `<span class="trace-reasoning">"${short}<span id="${uid}-rest" style="display:none">${rest}</span>…`
-           + `<span class="expand-btn" onclick="expandReasoning('${uid}')">show more</span>"</span>`;
+           + `<span class="expand-btn" onclick="expandReasoning('${uid}')">more</span>"</span>`;
     }
-
     case 'sub_agent':
       return `Launching sub-agent: <em>${escHtml(ev.action)}</em>`;
-
     case 'complete':
       return `<strong>RCA complete</strong> — confidence: `
            + `<strong style="color:var(--green)">${escHtml((ev.confidence||'').toUpperCase())}</strong> `
            + `(${ev.iterations} iterations)`;
-
     case 'done':
       return `<strong>Analysis finished</strong> — report rendered →`;
-
     case 'error':
       return `<strong>Error:</strong> ${escHtml(ev.message || 'Unknown error')}`;
-
     default:
       return escHtml(JSON.stringify(ev));
   }
@@ -583,50 +533,35 @@ function buildEventText(ev) {
 
 function expandReasoning(uid) {
   const rest = document.getElementById(uid + '-rest');
-  const btn = rest && rest.parentElement && rest.parentElement.querySelector('.expand-btn');
-  if (rest) { rest.style.display = 'inline'; }
-  if (btn)  { btn.style.display = 'none'; }
+  const btn  = rest && rest.parentElement && rest.parentElement.querySelector('.expand-btn');
+  if (rest) rest.style.display = 'inline';
+  if (btn)  btn.style.display  = 'none';
 }
 
 function appendEvent(ev) {
   const feed = document.getElementById('trace-feed');
-
-  // Remove placeholder on first event
-  if (eventCount === 0) {
-    feed.innerHTML = '';
-  }
+  if (eventCount === 0) feed.innerHTML = '';
   eventCount++;
-
   const cfg = EVENT_CONFIG[ev.type] || { icon: '•', cls: 'col-gray', evCls: '' };
-  const ts = formatTs(ev.ts);
-
   const div = document.createElement('div');
   div.className = `trace-event ${cfg.evCls}`;
   div.innerHTML = `
-    <span class="trace-ts">${ts}</span>
+    <span class="trace-ts">${formatTs(ev.ts)}</span>
     <span class="trace-icon">${cfg.icon}</span>
-    <span class="trace-text ${cfg.cls}">${buildEventText(ev)}</span>
-  `;
+    <span class="trace-text ${cfg.cls}">${buildEventText(ev)}</span>`;
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;
 }
 
 // ── Report rendering ───────────────────────────────────────────────────────────
 function showReport(reportDict) {
-  const iframe = document.getElementById('report-iframe');
-  const placeholder = document.getElementById('report-placeholder');
-  const linkStrip = document.getElementById('report-link-strip');
+  const iframe       = document.getElementById('report-iframe');
+  const placeholder  = document.getElementById('report-placeholder');
+  const linkStrip    = document.getElementById('report-link-strip');
   const reportStatus = document.getElementById('report-status');
 
-  // Build HTML from report via the /rca/{error_log_id}/report endpoint if we
-  // have an ID, otherwise render inline using the embedded renderer.
-  // NOTE: the endpoint is keyed on error_log_id (the seeded UUID from
-  // error_logs.id), NOT on rca_id (which is a separate UUID generated by
-  // Claude inside finish_rca).
-  const errorLogId = reportDict.error_log_id;
-
+  const errorLogId = reportDict.error_log_id || currentErrorLogId;
   if (errorLogId) {
-    // Fetch the rendered HTML from the API endpoint
     const reportUrl = `/rca/${errorLogId}/report`;
     iframe.src = reportUrl;
     iframe.classList.add('visible');
@@ -634,55 +569,10 @@ function showReport(reportDict) {
     linkStrip.classList.add('visible');
     document.getElementById('report-open-link').href = reportUrl;
     document.getElementById('report-json-link').href = reportUrl;
-    reportStatus.textContent = `${reportDict.service_name} · ${reportDict.incident_summary?.severity?.toUpperCase() || ''}`;
-  } else {
-    // Fallback: render inline
-    iframe.srcdoc = renderReportInline(reportDict);
-    iframe.classList.add('visible');
-    placeholder.style.display = 'none';
-    reportStatus.textContent = 'Complete';
+    const svc = reportDict.service_name || '';
+    const sev = reportDict.incident_summary?.severity?.toUpperCase() || '';
+    reportStatus.textContent = svc ? `${svc}${sev ? ' · ' + sev : ''}` : 'Complete';
   }
-}
-
-// Inline fallback renderer (mirrors the Python renderer logic in JS)
-function renderReportInline(r) {
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const sevColor = s => ({critical:'#dc2626',high:'#ea580c',medium:'#ca8a04',low:'#16a34a'}[s]||'#6b7280');
-  const s = r.incident_summary || {};
-  const rc = r.root_cause || {};
-  const meta = r.analysis_metadata || {};
-
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>body{margin:0;background:#0f1117;color:#e2e8f0;font-family:sans-serif;padding:20px;}
-.card{background:#1a1c2e;border:1px solid #2d3148;border-radius:10px;padding:20px;margin-bottom:16px;}
-h2{color:#a5b4fc;font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;margin:0 0 14px;
-   border-bottom:1px solid #2d3148;padding-bottom:10px;}
-pre{background:#0d0f1a;border:1px solid #2d3148;border-radius:6px;padding:12px;overflow-x:auto;
-    font-size:.8rem;color:#e2e8f0;white-space:pre-wrap;}
-.badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:.72rem;font-weight:700;
-       text-transform:uppercase;}
-p{line-height:1.6;margin:0 0 8px;color:#94a3b8;}
-</style></head><body>
-<div style="background:#1a1c2e;border:1px solid #2d3148;border-radius:10px;padding:20px;margin-bottom:20px;">
-  <div style="font-size:1.4rem;font-weight:800;color:#e2e8f0;margin-bottom:8px;">🔍 Root Cause Analysis</div>
-  <span class="badge" style="background:${sevColor(s.severity)};color:#fff">${esc(s.severity||'unknown')}</span>
-  &nbsp;<strong style="color:#a5b4fc">${esc(r.service_name)}</strong>
-  &nbsp;<span style="color:#64748b">${esc(s.environment)}</span>
-</div>
-<div class="card"><h2>📋 Incident Summary</h2>
-<p><strong>What:</strong> ${esc(s.what)}</p>
-<p><strong>When:</strong> ${esc(s.when)}</p>
-<p><strong>Impact:</strong> ${esc(s.estimated_impact||'—')}</p>
-</div>
-<div class="card"><h2>🎯 Root Cause</h2>
-<p>${esc(rc.summary)}</p>
-<p><strong>Confidence:</strong> ${esc(rc.confidence)} — ${esc(rc.confidence_reason)}</p>
-${rc.code_reference ? `<pre>${esc(rc.code_reference.file)} line ${esc(rc.code_reference.line)}</pre>` : ''}
-</div>
-<div class="card"><h2>⚙️ Metadata</h2>
-<p>Model: ${esc(meta.model)} · Iterations: ${esc(meta.react_iterations)} · Cache hits: ${(meta.cache_hits||[]).length}</p>
-</div>
-</body></html>`;
 }
 
 // ── Run RCA ────────────────────────────────────────────────────────────────────
@@ -694,17 +584,11 @@ function setStatus(state, text) {
 
 function startRCA() {
   const errorLogId = document.getElementById('error-log-id').value.trim();
-  if (!errorLogId) {
-    alert('Please select a scenario first.');
-    return;
-  }
+  if (!errorLogId) { alert('Click an error row above to select it first.'); return; }
+
+  if (currentErrorLogId !== errorLogId) currentErrorLogId = errorLogId;
 
   // Reset UI
-  if (currentEventSource) {
-    currentEventSource.close();
-    currentEventSource = null;
-  }
-
   eventCount = 0;
   document.getElementById('trace-feed').innerHTML = '';
   document.getElementById('report-iframe').className = 'report-iframe';
@@ -718,50 +602,34 @@ function startRCA() {
   btn.textContent = '⏳ Analyzing…';
   setStatus('running', 'Connecting to agent…');
 
-  // POST to /rca/run/stream and stream SSE
   fetch('/rca/run/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ error_log_id: errorLogId }),
   }).then(response => {
-    if (!response.ok) {
-      return response.text().then(t => { throw new Error(t); });
-    }
-
+    if (!response.ok) return response.text().then(t => { throw new Error(t); });
     setStatus('running', 'Agent running…');
-    const reader = response.body.getReader();
+    const reader  = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
 
     function pump() {
       reader.read().then(({ done, value }) => {
-        if (done) {
-          onStreamEnd();
-          return;
-        }
+        if (done) { onStreamEnd(); return; }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop(); // keep incomplete line
-
+        buffer = lines.pop();
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            try {
-              const ev = JSON.parse(line.slice(6));
-              handleEvent(ev);
-            } catch (e) {
-              console.warn('Parse error:', e, line);
-            }
+            try { handleEvent(JSON.parse(line.slice(6))); }
+            catch (e) { console.warn('Parse error:', e, line); }
           }
         }
         pump();
-      }).catch(err => {
-        onStreamError(err.message);
-      });
+      }).catch(err => onStreamError(err.message));
     }
     pump();
-  }).catch(err => {
-    onStreamError(err.message);
-  });
+  }).catch(err => onStreamError(err.message));
 }
 
 function handleEvent(ev) {
@@ -775,26 +643,18 @@ function handleEvent(ev) {
     resetBtn();
   } else {
     appendEvent(ev);
-    if (ev.type === 'start') {
-      setStatus('running', `Analyzing ${ev.service}…`);
-    } else if (ev.type === 'complete') {
-      setStatus('running', `Wrapping up…`);
-    }
+    if (ev.type === 'start')    setStatus('running', `Analyzing ${ev.service}…`);
+    if (ev.type === 'complete') setStatus('running', 'Wrapping up…');
   }
 }
 
 function onDone(report) {
-  if (report) {
-    showReport(report);
-  }
+  if (report) showReport(report);
   resetBtn();
+  loadErrors(); // refresh list to show updated status
 }
 
-function onStreamEnd() {
-  setStatus('done', 'Stream closed');
-  resetBtn();
-}
-
+function onStreamEnd() { setStatus('done', 'Stream closed'); resetBtn(); }
 function onStreamError(msg) {
   appendEvent({ type: 'error', message: msg, ts: new Date().toISOString() });
   setStatus('error', 'Stream error');
@@ -808,7 +668,8 @@ function resetBtn() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
-loadScenarios();
+loadErrors();
+startAutoRefresh();
 </script>
 </body>
 </html>

@@ -4,7 +4,30 @@
       "Bash(mysql --version)",
       "Bash(python *)",
       "PowerShell(docker exec banking-app *)",
-      "PowerShell(docker exec rca-mysql *)"
+      "PowerShell(docker exec rca-mysql *)",
+      "Bash(Get-ChildItem -Path \"E:\\\\WISSEN\\\\rca-agent\" -Force)",
+      "Bash(Select-Object -Property Mode, Name)",
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"E:\\\\WISSEN\\\\rca-agent\" -Force | Where-Object { $_.Name -eq \".env\" } | Select-Object Name, LastWriteTime, Length)",
+      "Bash(Get-ChildItem -Path \"e:\\\\WISSEN\\\\rca - git\\\\rca-agent\" -Recurse -Force)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:5000/health\" | ConvertTo-Json 2>&1)",
+      "Bash(dir /s /b)",
+      "Bash(git rm *)",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\WISSEN\\\\banking-app\" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | Sort-Object)",
+      "Bash(dir /s /b \"E:\\\\WISSEN\\\\banking-app\\\\bank-application\")",
+      "Bash(findstr /E \"\\\\\\\\.yaml|\\\\\\\\.yml|\\\\\\\\.properties|\\\\\\\\.env|Dockerfile|docker-compose\")",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\WISSEN\\\\banking-app\\\\bank-application\" -Recurse -File | Where-Object {$_.Extension -match '\\\\.\\(yaml|yml|properties|env|sh\\)$' -or $_.Name -match '\\(Dockerfile|docker-compose\\)' } | ForEach-Object { $_.FullName } | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\WISSEN\\\\banking-app\\\\bank-application\" -Recurse | Where-Object {-not $_.PSIsContainer} | Select-Object -ExpandProperty FullName | Sort-Object | ForEach-Object { $_.Replace\\('E:\\\\WISSEN\\\\banking-app\\\\bank-application\\\\', ''\\) })",
+      "Bash(curl *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(cp -r 'E:\\\\WISSEN\\\\rca-agent\\\\.claude\\\\worktrees\\\\agent-ab60af6398876d542/banking-app-master/rca-agent/ui/src' 'E:\\\\WISSEN\\\\rca-agent/banking-app-master/rca-agent/ui/')",
+      "Bash(cp -r 'E:\\\\WISSEN\\\\rca-agent\\\\.claude\\\\worktrees\\\\agent-ab60af6398876d542/banking-app-master/rca-agent/ui/dist/' 'E:\\\\WISSEN\\\\rca-agent/banking-app-master/rca-agent/ui/')",
+      "Bash(Start-Sleep -Seconds 3)"
     ]
   }
 }

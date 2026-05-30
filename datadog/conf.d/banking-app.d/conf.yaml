@@ -1,12 +1,21 @@
 logs:
   - type: file
-    path: /var/log/banking-app/app.log
+    path: /var/log/banking-app/banking-app.json.log
     service: banking-app
     source: java
-    sourcecategory: sourcecode
     tags:
       - env:dev
-    log_processing_rules:
-      - type: multi_line
-        name: java_log_start_with_date
-        pattern: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
+
+  - type: file
+    path: /var/log/banking-app/pricing-service.json.log
+    service: pricing-service
+    source: java
+    tags:
+      - env:dev
+
+  - type: file
+    path: /var/log/banking-app/order-service.json.log
+    service: order-service
+    source: java
+    tags:
+      - env:dev

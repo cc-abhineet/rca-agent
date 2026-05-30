@@ -53,37 +53,35 @@ _DD_LOGS_URL = "https://api.{site}/api/v2/logs/events/search"
 
 # ── Project loading ───────────────────────────────────────────────────────────
 
-def _load_datadog_projects() -> list[dict]:
+def _load_datadog_projects(poll_all: bool = False) -> list[dict]:
     """
-    Load projects.yaml and return only the projects with observability_mode=datadog.
+    Load projects.yaml and return services to poll from Datadog.
 
-    This is the single source of truth for which services this poller watches.
-    To monitor a different application: update projects.yaml and rebuild the image.
+    When poll_all=True (runtime Datadog toggle), ALL services are polled
+    regardless of their observability_mode setting.
+    When poll_all=False (legacy MODE=datadog_poll), only services with
+    observability_mode=datadog are polled.
     """
     try:
         with open(settings.projects_yaml_path, encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
         all_projects = data.get("projects", [])
-        dd_projects = [p for p in all_projects if p.get("observability_mode") == "datadog"]
-        if not dd_projects:
-            logger.warning(
-                "No projects with observability_mode=datadog found in %s. "
-                "Nothing to poll.",
-                settings.projects_yaml_path,
-            )
+        if poll_all:
+            projects = all_projects
+        else:
+            projects = [p for p in all_projects if p.get("observability_mode") == "datadog"]
+
+        if not projects:
+            logger.warning("No projects found in %s — nothing to poll.", settings.projects_yaml_path)
         else:
             logger.info(
-                "Loaded %d Datadog-monitored project(s): %s",
-                len(dd_projects),
-                [p["id"] for p in dd_projects],
+                "Polling %d service(s) from Datadog: %s",
+                len(projects),
+                [p["id"] for p in projects],
             )
-        return dd_projects
+        return projects
     except FileNotFoundError:
-        logger.error(
-            "projects.yaml not found at %s. "
-            "Ensure the file is present in the container (baked in via Dockerfile).",
-            settings.projects_yaml_path,
-        )
+        logger.error("projects.yaml not found at %s.", settings.projects_yaml_path)
         return []
     except Exception as exc:
         logger.exception("Failed to load projects.yaml: %s", exc)
@@ -94,36 +92,37 @@ def _load_datadog_projects() -> list[dict]:
 
 def _build_raw_log(log_event: dict, service_name: str) -> str:
     """
-    Convert a Datadog log event dict into a raw log string.
+    Convert a Datadog log event into a rich raw log string that includes
+    the full stack trace so the parse → analyze pipeline has the same
+    context as a locally-tailed log entry.
 
-    The resulting string is passed into the existing LangGraph pipeline
-    (parse_node → analyze_node → store_node), which expects a log line in a
-    format close to Spring Boot's standard pattern:
-        <timestamp> <LEVEL> <logger> - <message>
-
-    Datadog log event structure (relevant fields):
+    Datadog log event structure (after our logback fix):
         {
-          "id": "...",
           "attributes": {
-            "timestamp": "2024-01-15T10:30:01.123Z",
+            "timestamp": "...",
             "status":    "error",
-            "message":   "NullPointerException ...",
+            "message":   "NullPointerException: null",
             "service":   "banking-app",
-            "attributes": {            # nested app-level attributes
-              "logger": {"name": "com.demo.banking.controller.ChaosController"},
-              "dd.trace_id": "...",
-              ...
+            "attributes": {
+              "logger":  {"name": "c.d.banking.ChaosController"},
+              "error":   {
+                "kind":    "NullPointerException",
+                "message": "null",
+                "stack":   "java.lang.NullPointerException\n\tat com.demo..."
+              }
             }
           }
         }
     """
-    attrs = log_event.get("attributes", {})
+    attrs  = log_event.get("attributes", {})
     timestamp = attrs.get("timestamp", datetime.now(timezone.utc).isoformat())
-    status = attrs.get("status", "error").upper()
-    message = attrs.get("message", "Unknown error")
+    status    = attrs.get("status", "error").upper()
+    message   = attrs.get("message", "Unknown error")
 
-    # Dig out the logger name from nested attributes (Spring Boot via Datadog APM)
+    # Nested app-level attributes written by LogstashEncoder
     nested = attrs.get("attributes", {})
+
+    # Logger name
     logger_field = nested.get("logger", {})
     if isinstance(logger_field, dict):
         logger_name = logger_field.get("name", service_name)
@@ -132,7 +131,26 @@ def _build_raw_log(log_event: dict, service_name: str) -> str:
     else:
         logger_name = service_name
 
-    return f"{timestamp} {status} {logger_name} - {message}"
+    # error.* fields — set via <fieldNames><stackTrace>error.stack</stackTrace></fieldNames>
+    error_obj  = nested.get("error", {})
+    error_kind  = error_obj.get("kind", "")
+    error_msg   = error_obj.get("message", "")
+    error_stack = error_obj.get("stack", "")
+
+    # Build synthetic Spring Boot-style log line
+    parts = [f"{timestamp} {status} {logger_name} - {message}"]
+
+    # Append exception header (e.g. "NullPointerException: null") if not already
+    # present in the message so the parser can identify error_type
+    if error_kind and error_kind not in message:
+        exc_header = f"{error_kind}: {error_msg}" if error_msg else error_kind
+        parts.append(exc_header)
+
+    # Append full stack trace — gives the analyzer the same depth as local mode
+    if error_stack:
+        parts.append(error_stack)
+
+    return "\n".join(parts)
 
 
 # ── Per-service poll ──────────────────────────────────────────────────────────
@@ -271,23 +289,26 @@ async def _poll_service(
 
 # ── Main polling loop ─────────────────────────────────────────────────────────
 
-async def run_datadog_poller() -> None:
+async def run_datadog_poller(poll_all: bool = False) -> None:
     """
-    Entry point for MODE=datadog_poll.
+    Poll Datadog for new error logs and process them through Gemini → DB.
 
-    Reads projects.yaml, validates credentials, then loops forever polling each
-    Datadog-monitored service in sequence with POLL_INTERVAL_SECONDS between sweeps.
+    poll_all=True  — poll every service in projects.yaml (used by runtime toggle)
+    poll_all=False — only services with observability_mode=datadog (legacy mode)
+
+    Only NEW logs are processed — the cursor stored in service_context_cache
+    ensures we resume exactly where the last poll left off.
     """
     await ensure_table()
 
     if not settings.dd_api_key or not settings.dd_app_key:
         logger.error(
-            "DD_API_KEY and DD_APP_KEY must be set for MODE=datadog_poll. "
-            "Check your environment variables or Secrets Manager."
+            "DD_API_KEY and DD_APP_KEY must be set for Datadog polling. "
+            "Check your environment variables."
         )
         return
 
-    projects = _load_datadog_projects()
+    projects = _load_datadog_projects(poll_all=poll_all)
     if not projects:
         logger.error("No Datadog-monitored projects found — poller exiting.")
         return
