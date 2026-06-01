@@ -21,6 +21,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    id: 'reports',
+    label: 'Reports',
+    icon: (
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
     id: 'tokens',
     label: 'Tokens',
     icon: (
@@ -42,7 +51,12 @@ const NAV_ITEMS = [
 ]
 
 export default function Sidebar({ healthOk }) {
-  const { activeNav, setActiveNav } = useApp()
+  const { activeNav, setActiveNav, newReportCount, clearNewReports } = useApp()
+
+  const handleNavClick = (id) => {
+    setActiveNav(id)
+    if (id === 'reports') clearNewReports()
+  }
 
   return (
     <aside className="sidebar">
@@ -62,10 +76,13 @@ export default function Sidebar({ healthOk }) {
           <button
             key={item.id}
             className={`nav-item${activeNav === item.id ? ' active' : ''}`}
-            onClick={() => setActiveNav(item.id)}
+            onClick={() => handleNavClick(item.id)}
           >
             {item.icon}
             <span>{item.label}</span>
+            {item.id === 'reports' && newReportCount > 0 && (
+              <span className="nav-badge">{newReportCount}</span>
+            )}
           </button>
         ))}
       </nav>

@@ -160,105 +160,248 @@ _HTML = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Error Trigger Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apollo — Error Trigger Dashboard</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0d0f1a;--surface:#151929;--border:#1e2440;
-  --text:#cbd5e1;--muted:#64748b;--purple:#7c3aed;
+  --bg:#070d1a;--bg2:#0b1120;--surface:#0f1729;--surface2:#131d30;
+  --border:#1a2440;--border2:#22304a;
+  --text:#e2e8f0;--text2:#94a3b8;--muted:#475569;
+  --indigo:#6366f1;--indigo2:#818cf8;--cyan:#06b6d4;
+  --green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#a855f7;
 }
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
-     color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+     background:var(--bg);color:var(--text);height:100vh;
+     display:flex;flex-direction:column;overflow:hidden;
+     -webkit-font-smoothing:antialiased}
 
-/* header */
-header{display:flex;align-items:center;gap:12px;padding:9px 16px;
-       background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
-header h1{font-size:.95rem;font-weight:700;color:#e2e8f0;white-space:nowrap}
-.badge{display:inline-flex;align-items:center;gap:5px;border-radius:5px;
-       padding:3px 9px;font-size:.7rem;font-weight:700}
-.dot{width:8px;height:8px;border-radius:50%;background:#374151;display:inline-block;flex-shrink:0}
-.dot.live{background:#22c55e;box-shadow:0 0 6px #22c55e88}
-.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
-.err-chip{font-size:.75rem;color:#f87171;font-weight:700}
-.ext-link{font-size:.73rem;color:#818cf8;text-decoration:none;padding:4px 10px;
-          border:1px solid #3730a3;border-radius:5px;white-space:nowrap}
-.ext-link:hover{background:#3730a3;color:#e0e7ff}
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2)}
 
-/* layout */
+/* ── header ── */
+header{
+  display:flex;align-items:center;gap:10px;
+  padding:0 18px;height:52px;
+  background:linear-gradient(180deg,rgba(99,102,241,0.08) 0%,transparent 100%);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.hdr-logo{
+  display:flex;align-items:center;gap:8px;
+  font-size:1rem;font-weight:800;color:var(--text);letter-spacing:-.02em;
+}
+.hdr-logo-icon{
+  width:28px;height:28px;border-radius:7px;
+  background:linear-gradient(135deg,var(--indigo),var(--purple));
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;flex-shrink:0;
+  box-shadow:0 0 12px rgba(99,102,241,0.4);
+}
+.hdr-sep{width:1px;height:20px;background:var(--border2);flex-shrink:0}
+.hdr-svc-badges{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.svc-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:20px;
+  font-size:.68rem;font-weight:700;letter-spacing:.02em;
+}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.err-counter{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 12px;border-radius:20px;
+  background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);
+  font-size:.75rem;font-weight:700;color:#fca5a5;
+}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;transition:all .3s}
+.live-dot.active{background:var(--green);box-shadow:0 0 8px rgba(16,185,129,0.6);animation:ldPulse 1.5s ease infinite}
+@keyframes ldPulse{0%,100%{opacity:1}50%{opacity:.5}}
+.hdr-link{
+  font-size:.75rem;color:var(--indigo2);text-decoration:none;
+  padding:5px 12px;border:1px solid rgba(99,102,241,0.3);
+  border-radius:7px;font-weight:600;transition:all .15s;white-space:nowrap;
+}
+.hdr-link:hover{background:rgba(99,102,241,0.12);color:#c7d2fe}
+
+.log-filter-btn{
+  padding:3px 9px;border-radius:5px;font-size:.68rem;font-weight:600;
+  border:1px solid var(--border2);background:transparent;color:var(--muted);
+  cursor:pointer;transition:all .12s;font-family:inherit;flex-shrink:0;
+}
+.log-filter-btn:hover{color:var(--text2);border-color:rgba(255,255,255,0.2)}
+.log-filter-btn.active-all  {background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.4);color:var(--indigo2)}
+.log-filter-btn.active-error{background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.4);color:#fca5a5}
+.log-filter-btn.active-warn {background:rgba(245,158,11,0.12);border-color:rgba(245,158,11,0.35);color:#fcd34d}
+.log-clear-btn{
+  padding:3px 9px;border-radius:5px;font-size:.68rem;font-weight:600;
+  border:1px solid var(--border2);background:transparent;color:var(--muted);
+  cursor:pointer;font-family:inherit;transition:all .12s;flex-shrink:0;
+}
+.log-clear-btn:hover{color:var(--text2);border-color:rgba(255,255,255,0.18)}
+
+/* ── layout ── */
 main{display:flex;flex:1;overflow:hidden}
 
-/* log pane */
-.log-pane{flex:1;overflow-y:auto;padding:8px 12px;
-          font-family:'Cascadia Code','Fira Code',monospace;font-size:.74rem;
-          line-height:1.55;border-right:1px solid var(--border)}
+/* ── log pane — identical structure to original, proven to work ── */
+.log-pane{
+  flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 10px;
+  font-family:'Cascadia Code','JetBrains Mono','Fira Code',monospace;
+  font-size:.73rem;line-height:1.58;
+  border-right:1px solid var(--border);
+  background:var(--bg);
+}
 .log-line{display:flex;align-items:baseline;gap:6px;padding:1px 0 1px 4px;
           border-left:2px solid transparent}
-.log-line.error{border-color:#ef4444;background:rgba(239,68,68,.05)}
-.log-line.warn {border-color:#f59e0b;background:rgba(245,158,11,.03)}
-.log-line.trace{color:#374151}
+.log-line.error{border-color:var(--red);background:rgba(239,68,68,.05)}
+.log-line.warn {border-color:var(--amber);background:rgba(245,158,11,.03)}
+.log-line.trace{color:var(--muted)}
 .log-line.info {color:#94a3b8}
 .log-line.error .ll-text{color:#fca5a5}
 .log-line.warn  .ll-text{color:#fcd34d}
-.ll-svc{flex-shrink:0;font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px}
+.ll-svc{flex-shrink:0;font-size:.63rem;font-weight:700;padding:1px 5px;border-radius:3px}
 .ll-text{word-break:break-all}
 .log-placeholder{height:100%;display:flex;align-items:center;justify-content:center;
                  color:var(--muted);flex-direction:column;gap:10px;font-size:.85rem}
-.spinner{width:20px;height:20px;border:2px solid var(--border);
-         border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite}
+.spinner{width:20px;height:20px;border:2px solid rgba(99,102,241,0.15);
+         border-top-color:var(--indigo);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* sidebar */
-.sidebar{width:330px;flex-shrink:0;overflow-y:auto;background:var(--surface);
-         display:flex;flex-direction:column}
-.panel{border-bottom:1px solid var(--border);padding:12px 14px}
-.ptitle{font-size:.68rem;font-weight:700;text-transform:uppercase;
-        letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+/* ── sidebar ── */
+.sidebar{
+  width:340px;flex-shrink:0;overflow-y:auto;
+  background:var(--surface);
+  display:flex;flex-direction:column;
+}
 
-/* chaos */
-.grp-hdr{font-size:.7rem;font-weight:700;color:#fff;border-radius:4px;
-         padding:2px 8px;display:inline-block;margin-bottom:6px}
-.chaos-btns{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
-.cbtn{flex:1 1 calc(50% - 2px);padding:6px 7px;border:1px solid #2d3f58;border-radius:5px;
-      background:#1a2235;color:#cbd5e1;font-size:.7rem;font-weight:600;cursor:pointer;
-      text-align:left;transition:background .12s,transform .1s}
-.cbtn:hover{background:#223050;transform:translateY(-1px)}
-.cbtn:active{transform:none}
-#chaos-msg{font-size:.72rem;min-height:16px;margin-top:4px;word-break:break-word}
-#chaos-msg.ok  {color:#4ade80}
-#chaos-msg.err {color:#f87171}
-#chaos-msg.inf {color:#94a3b8}
+/* ── section ── */
+.section{
+  border-bottom:1px solid var(--border);
+  padding:14px 16px;
+}
+.section-title{
+  font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px;
+}
+.section-title::after{
+  content:'';flex:1;height:1px;background:var(--border2);
+}
 
-/* rca */
-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:5px;
-      color:var(--text);font-size:.76rem;padding:7px 9px;margin-bottom:6px;font-family:monospace}
-input:focus{outline:none;border-color:var(--purple)}
-.btn-rca{width:100%;padding:8px;border:none;border-radius:5px;background:var(--purple);
-         color:#fff;font-size:.82rem;font-weight:700;cursor:pointer}
-.btn-rca:hover{opacity:.88}
-#rca-out{margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:5px;
-         padding:7px;font-size:.7rem;color:var(--muted);min-height:40px;max-height:180px;
-         overflow-y:auto;white-space:pre-wrap;font-family:monospace;word-break:break-word}
+/* ── service group ── */
+.svc-group{margin-bottom:14px}
+.svc-group:last-child{margin-bottom:0}
+.svc-group-header{
+  display:flex;align-items:center;gap:7px;margin-bottom:8px;
+}
+.svc-group-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.svc-group-label{font-size:.72rem;font-weight:700;color:var(--text2)}
+.chaos-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.cbtn{
+  padding:8px 9px;border-radius:7px;
+  border:1px solid var(--border2);
+  background:var(--surface2);
+  color:var(--text2);font-size:.72rem;font-weight:600;
+  cursor:pointer;text-align:left;
+  transition:all .14s;
+  display:flex;align-items:center;gap:5px;
+  font-family:inherit;
+}
+.cbtn:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.18);color:var(--text);transform:translateY(-1px)}
+.cbtn:active{transform:none;opacity:.85}
+.cbtn-icon{font-size:.9em;flex-shrink:0}
 
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-thumb{background:#1e2440;border-radius:2px}
+/* ── chaos status ── */
+.chaos-status{
+  margin-top:10px;padding:8px 10px;border-radius:7px;
+  font-size:.72rem;font-weight:600;min-height:34px;
+  display:flex;align-items:center;gap:7px;
+  background:rgba(255,255,255,0.03);border:1px solid var(--border);
+  color:var(--muted);
+  transition:all .2s;
+}
+.chaos-status.ok {background:rgba(16,185,129,0.08);border-color:rgba(16,185,129,0.3);color:#6ee7b7}
+.chaos-status.err{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.3);color:#fca5a5}
+.chaos-status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:currentColor}
+
+/* ── rca panel ── */
+.rca-input{
+  width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:7px;
+  color:var(--text);font-size:.75rem;padding:8px 10px;
+  font-family:'Cascadia Code','JetBrains Mono',monospace;
+  transition:border-color .15s;
+  margin-bottom:8px;
+}
+.rca-input:focus{outline:none;border-color:var(--indigo);box-shadow:0 0 0 2px rgba(99,102,241,0.15)}
+.rca-input::placeholder{color:var(--muted)}
+.btn-rca{
+  width:100%;padding:9px;border:none;border-radius:7px;
+  background:linear-gradient(135deg,var(--indigo),var(--purple));
+  color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  font-family:inherit;transition:opacity .15s,transform .1s;
+  box-shadow:0 4px 16px rgba(99,102,241,0.35);
+}
+.btn-rca:hover{opacity:.9;transform:translateY(-1px)}
+.btn-rca:active{transform:none;opacity:.85}
+#rca-out{
+  margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:7px;
+  padding:8px 10px;font-size:.68rem;color:var(--muted);
+  min-height:44px;max-height:160px;overflow-y:auto;
+  white-space:pre-wrap;font-family:'Cascadia Code','JetBrains Mono',monospace;
+  word-break:break-word;line-height:1.55;
+}
+#rca-out.ok {color:#6ee7b7}
+#rca-out.err{color:#fca5a5}
+
+/* ── links panel ── */
+.link-card{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:8px;
+  border:1px solid var(--border2);background:var(--surface2);
+  text-decoration:none;color:var(--text2);font-size:.78rem;font-weight:600;
+  transition:all .14s;margin-bottom:7px;
+}
+.link-card:last-child{margin-bottom:0}
+.link-card:hover{border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:var(--text)}
+.link-card-icon{font-size:1em;flex-shrink:0}
+.link-card-arrow{margin-left:auto;font-size:.7em;color:var(--muted)}
 </style>
 </head>
 <body>
+
 <header>
-  <span id="dot" class="dot"></span>
-  <h1>⚡ Error Trigger Dashboard</h1>
-  {% for g in groups %}
-  <span class="badge" style="background:{{g.color}}22;color:{{g.color}}">
-    {{g.label}}
-  </span>
-  {% endfor %}
+  <div class="hdr-logo">
+    <div class="hdr-logo-icon">⚡</div>
+    Apollo
+  </div>
+  <div class="hdr-sep"></div>
+  <div class="hdr-svc-badges">
+    {% for g in groups %}
+    <span class="svc-badge" style="background:{{g.color}}18;color:{{g.color}};border:1px solid {{g.color}}35">
+      {{g.label}}
+    </span>
+    {% endfor %}
+  </div>
   <div class="hdr-right">
-    <span class="err-chip">Errors: <span id="errcnt">0</span></span>
-    <a class="ext-link" href="{{rca_url}}/demo" target="_blank">RCA Dashboard ↗</a>
+    <!-- filter buttons live in header — no wrapper around the scroll pane -->
+    <button class="log-filter-btn active-all" id="f-all"   onclick="setFilter('all')">All</button>
+    <button class="log-filter-btn"            id="f-error" onclick="setFilter('error')">Errors</button>
+    <button class="log-filter-btn"            id="f-warn"  onclick="setFilter('warn')">Warn</button>
+    <button class="log-clear-btn" onclick="clearLogs()">Clear</button>
+    <div class="hdr-sep"></div>
+    <div class="err-counter">
+      <span>Errors</span>
+      <span id="errcnt" style="font-size:.9rem">0</span>
+    </div>
+    <div id="live-dot" class="live-dot"></div>
+    <a class="hdr-link" href="{{rca_url}}" target="_blank">RCA Dashboard ↗</a>
   </div>
 </header>
 
 <main>
+
+  <!-- log-pane is the scroll container — id="pane" on this element, logs direct children -->
   <div class="log-pane" id="pane">
     <div class="log-placeholder" id="placeholder">
       <div class="spinner"></div>
@@ -266,36 +409,64 @@ input:focus{outline:none;border-color:var(--purple)}
     </div>
   </div>
 
+  <!-- ── SIDEBAR ── -->
   <div class="sidebar">
 
-    <div class="panel">
-      <div class="ptitle">Chaos Scenarios</div>
+    <!-- Chaos Scenarios -->
+    <div class="section">
+      <div class="section-title">Chaos Scenarios</div>
       {% for g in groups %}
-      <span class="grp-hdr" style="background:{{g.color}}">{{g.label}}</span>
-      <div class="chaos-btns">
-        {% for s in g.scenarios %}
-        <button class="cbtn" onclick="chaos('{{s.url}}')">{{s.icon}} {{s.label}}</button>
-        {% endfor %}
+      <div class="svc-group">
+        <div class="svc-group-header">
+          <div class="svc-group-dot" style="background:{{g.color}};box-shadow:0 0 6px {{g.color}}88"></div>
+          <span class="svc-group-label">{{g.label}}</span>
+        </div>
+        <div class="chaos-grid">
+          {% for s in g.scenarios %}
+          <button class="cbtn" onclick="chaos('{{s.url}}','{{g.color}}')">
+            <span class="cbtn-icon">{{s.icon}}</span>
+            {{s.label}}
+          </button>
+          {% endfor %}
+        </div>
       </div>
       {% endfor %}
-      <div id="chaos-msg" class="inf">Click a scenario to trigger an error.</div>
-    </div>
-
-    <div class="panel">
-      <div class="ptitle">Run RCA</div>
-      <input id="eid" placeholder="error_log_id UUID from DB">
-      <button class="btn-rca" onclick="runRca()">▶ Run RCA Analysis</button>
-      <div id="rca-out">Paste an error_log_id and click Run RCA.</div>
-    </div>
-
-    <div class="panel">
-      <div class="ptitle">Links</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <a class="ext-link" style="text-align:center"
-           href="{{rca_url}}/demo" target="_blank">📊 RCA Dashboard (port 8000)</a>
-        <a class="ext-link" style="text-align:center;border-color:#1e3a5f;color:#38bdf8"
-           href="https://app.{{dd_site}}/logs" target="_blank">🐶 Open Datadog Logs ↗</a>
+      <div class="chaos-status" id="chaos-status">
+        <span class="chaos-status-dot" style="opacity:.3"></span>
+        Click a scenario to trigger an error.
       </div>
+    </div>
+
+    <!-- RCA Trigger -->
+    <div class="section">
+      <div class="section-title">Run RCA Analysis</div>
+      <input class="rca-input" id="eid" placeholder="Paste error_log_id UUID…" autocomplete="off" spellcheck="false">
+      <button class="btn-rca" onclick="runRca()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        Run RCA Analysis
+      </button>
+      <div id="rca-out">Paste an error_log_id from the RCA dashboard and click Run.</div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="section">
+      <div class="section-title">Quick Links</div>
+      <a class="link-card" href="{{rca_url}}" target="_blank">
+        <span class="link-card-icon">📊</span>
+        RCA Dashboard
+        <span class="link-card-arrow">↗</span>
+      </a>
+      <a class="link-card" href="{{rca_url}}/api/logs" target="_blank">
+        <span class="link-card-icon">🗃</span>
+        Error Logs API
+        <span class="link-card-arrow">↗</span>
+      </a>
+      <a class="link-card" href="https://app.{{dd_site}}/logs" target="_blank"
+         style="border-color:rgba(96,165,250,0.2);color:#7dd3fc">
+        <span class="link-card-icon">🐶</span>
+        Datadog Logs
+        <span class="link-card-arrow">↗</span>
+      </a>
     </div>
 
   </div>
@@ -305,21 +476,39 @@ input:focus{outline:none;border-color:var(--purple)}
 const RCA_URL   = {{ rca_url|tojson }};
 const SVC_COLOR = {{ svc_color|tojson }};
 const pane      = document.getElementById("pane");
-const dot       = document.getElementById("dot");
-let errcnt = 0, nextIdx = 0, firstLog = true;
+const liveDot   = document.getElementById("live-dot");
+let errcnt = 0, nextIdx = 0, firstLog = true, activeFilter = 'all';
 
-/* ── poll logs every 2 s ─────────────────────────────────────────────────── */
+/* ── filter (buttons live in header) ── */
+function setFilter(f) {
+  activeFilter = f;
+  ['all','error','warn'].forEach(id => {
+    const btn = document.getElementById('f-' + id);
+    if (btn) btn.className = 'log-filter-btn' + (f === id ? ' active-' + f : '');
+  });
+  const rows = pane.getElementsByClassName('log-line');
+  for (let i = 0; i < rows.length; i++) {
+    const lvl = rows[i].dataset.level || 'info';
+    rows[i].style.display = (f === 'all' || lvl === f) ? '' : 'none';
+  }
+}
+
+function clearLogs() {
+  const rows = pane.getElementsByClassName('log-line');
+  while (rows.length) rows[0].remove();
+  errcnt = 0;
+  document.getElementById('errcnt').textContent = 0;
+}
+
+/* ── poll logs every 2 s ── */
 function pollLogs() {
   fetch("/api/logs?since=" + nextIdx)
-    .then(r => { dot.classList.toggle("live", r.ok); return r.json(); })
-    .then(d => {
-      d.lines.forEach(addLine);
-      nextIdx = d.next;
-    })
-    .catch(() => dot.classList.remove("live"));
+    .then(r => { liveDot.classList.toggle("active", r.ok); return r.json(); })
+    .then(d => { d.lines.forEach(addLine); nextIdx = d.next; })
+    .catch(() => liveDot.classList.remove("active"));
 }
 setInterval(pollLogs, 2000);
-pollLogs();   // immediate first call
+pollLogs();
 
 function addLine(e) {
   if (firstLog) {
@@ -328,7 +517,11 @@ function addLine(e) {
     firstLog = false;
   }
   const row = document.createElement("div");
-  row.className = "log-line " + (e.level || "info");
+  const lvl = e.level || "info";
+  row.className = "log-line " + lvl;
+  row.dataset.level = lvl;
+  if (activeFilter !== 'all' && lvl !== activeFilter) row.style.display = 'none';
+
   if (e.svc) {
     const b = document.createElement("span");
     b.className = "ll-svc";
@@ -342,6 +535,7 @@ function addLine(e) {
   t.textContent = e.text;
   row.appendChild(t);
   pane.appendChild(row);
+
   if (e.level === "error") {
     errcnt++;
     document.getElementById("errcnt").textContent = errcnt;
@@ -351,11 +545,11 @@ function addLine(e) {
   while (pane.children.length > 1000) pane.removeChild(pane.firstChild);
 }
 
-/* ── chaos ───────────────────────────────────────────────────────────────── */
+/* ── chaos ── */
 function chaos(url) {
-  const msg = document.getElementById("chaos-msg");
-  msg.className = "inf";
-  msg.textContent = "Sending…";
+  const box = document.getElementById("chaos-status");
+  box.className = "chaos-status";
+  box.innerHTML = '<span class="chaos-status-dot" style="opacity:.4"></span> Sending…';
   fetch("/proxy/chaos", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -364,33 +558,40 @@ function chaos(url) {
   .then(r => r.json())
   .then(d => {
     if (d.status >= 400) {
-      msg.className = "ok";
-      msg.textContent = "✓ Error triggered! (HTTP " + d.status + ") — watch the log stream.";
+      box.className = "chaos-status ok";
+      box.innerHTML = '<span class="chaos-status-dot"></span> ✓ Error triggered (HTTP ' + d.status + ') — watch the log stream';
     } else if (d.status === 0) {
-      msg.className = "err";
-      msg.textContent = "✗ Service unreachable — is it running? Check docker compose ps.";
+      box.className = "chaos-status err";
+      box.innerHTML = '<span class="chaos-status-dot"></span> ✗ Service unreachable — is Docker running?';
     } else {
-      msg.className = "inf";
-      msg.textContent = "HTTP " + d.status + " — " + (d.body || "").slice(0, 120);
+      box.className = "chaos-status";
+      box.innerHTML = '<span class="chaos-status-dot" style="opacity:.4"></span> HTTP ' + d.status + ' — ' + (d.body||'').slice(0,100);
     }
   })
-  .catch(e => { msg.className = "err"; msg.textContent = "✗ " + e; });
+  .catch(e => {
+    box.className = "chaos-status err";
+    box.innerHTML = '<span class="chaos-status-dot"></span> ✗ ' + e;
+  });
 }
 
-/* ── RCA trigger ─────────────────────────────────────────────────────────── */
+/* ── RCA ── */
 function runRca() {
   const id  = document.getElementById("eid").value.trim();
   const out = document.getElementById("rca-out");
-  if (!id) { out.textContent = "⚠ Paste an error_log_id first."; return; }
-  out.textContent = "Posting to rca-agent…";
+  if (!id) { out.className = 'err'; out.textContent = "⚠ Paste an error_log_id first."; return; }
+  out.className = ''; out.textContent = "Sending to RCA agent…";
   fetch(RCA_URL + "/rca/run", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({error_log_id: id})
   })
   .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-  .then(d => { out.textContent = JSON.stringify(d, null, 2); window.open(RCA_URL + "/demo", "_blank"); })
-  .catch(e => { out.textContent = "Error: " + e; });
+  .then(d => {
+    out.className = 'ok';
+    out.textContent = "✓ RCA started — opening dashboard… " + JSON.stringify(d, null, 2).slice(0, 200);
+    window.open(RCA_URL, "_blank");
+  })
+  .catch(e => { out.className = 'err'; out.textContent = "✗ " + e; });
 }
 </script>
 </body>

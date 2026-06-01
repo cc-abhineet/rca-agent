@@ -89,8 +89,8 @@ First build takes 3–5 minutes (downloads Maven/Node dependencies). Subsequent 
 | pricing-service | http://localhost:8081 | Spring Boot pricing service |
 | order-service | http://localhost:8082 | Spring Boot order service |
 | **Apollo UI** | **http://localhost:8000** | Main RCA dashboard |
-| Demo chaos UI | http://localhost:5000 | Trigger errors manually |
-| ingestion-agent | (internal :8001) | Log watcher + Gemini pipeline |
+| Demo chaos UI | http://localhost:5000 | Trigger errors + live log stream |
+| ingestion-agent | (internal :8001) | Log watcher + Gemini classification pipeline |
 | dd-agent | (internal) | Ships logs to Datadog (optional) |
 
 ---
@@ -105,18 +105,69 @@ You'll land on the animated intro page. Click **Enter Dashboard** to see the mai
 
 ## Step 7 — Trigger some errors
 
-Open **http://localhost:5000** (the demo chaos UI) and click any of the error trigger buttons — NullPointerException, DB connection failure, etc.
+Open **http://localhost:5000** — the demo chaos UI. It shows:
+- **Live log stream** (left pane) with filter buttons (All / Errors / Warnings / Clear)
+- **Chaos Scenarios** (right sidebar) — grouped by service with colored buttons
+- **Run RCA Analysis** — paste an `error_log_id` UUID to trigger RCA directly
+- **Quick Links** — RCA Dashboard, Error Logs API, Datadog Logs
 
-Within a few seconds you'll see the errors appear in Apollo's **Log Explorer** tab, already classified by Gemini with risk level and suggestions.
+Click any chaos button (e.g. `💥 NullPointerException` under Banking App). Within a few seconds:
+- The error appears in the live log stream on the left
+- It shows up in Apollo's **Log Explorer** tab, classified by Gemini with risk level and suggestions
 
 ---
 
 ## Running an RCA
 
-1. In the Log Explorer, find an incident card with status `pending`
-2. Click **Run RCA →**
-3. Watch the live stream in the panel that opens — you'll see Claude reasoning through the error, calling GitHub tools, and building the report
-4. When done, click **View Full Report** for the HTML RCA report
+### From the RCA Dashboard tab
+
+1. Go to the **RCA** tab in Apollo
+2. Click the stat cards to filter by status (Pending / Running / Completed / Failed)
+3. Find an incident with status `Pending` and click **▶ Run RCA**
+4. The RCA stream panel opens automatically
+
+### From the Log Explorer tab
+
+1. Find an incident card with status `pending`
+2. Click **Run RCA →** on that card
+
+### Watching the stream
+
+The RCA stream panel shows:
+- **Phase tracker**: Initialize → Repository → Analysis → Complete
+- **Iteration groups**: each reasoning step + its tool calls grouped under `Iteration N`
+- **Live stats**: iteration count / 20, total events, elapsed time, progress bar
+- **Filter bar**: All / Reasoning / Tools / System with counts; Expand/Collapse All
+- **Footer buttons**: ■ Stop (red), ↓ Bottom (cyan), Close (gray → red on hover)
+
+When analysis finishes:
+- A **green celebration overlay** appears for 3 seconds ("Root Cause Identified!")
+- A **Reports** badge appears on the sidebar nav
+- Click **📊 Report** to open the full HTML report in a new tab
+
+If you click **■ Stop**, a **red stop overlay** appears confirming the cancellation.
+
+> **Re-opening a running stream**: closing the panel and re-opening it for the same incident reconnects to the ongoing agent — no new agent is started, no state is lost. Previously collected events are restored from the session cache.
+
+---
+
+## Viewing Reports
+
+Go to the **Reports** tab in Apollo to browse all completed RCAs:
+
+- **Search** by service name or error type
+- **Filter** by confidence level (High / Medium / Low)
+- **Sort** by newest or oldest
+- Click any card to open the **inline detail panel** showing:
+  - Incident summary, root cause, code reference
+  - Timeline, suggested solutions, prevention recommendations
+  - Analysis metadata (model, iterations, files fetched)
+
+### Downloading as PDF
+
+Two options:
+1. **📥 PDF** button on any report card — downloads the report as an `.html` file you can open and print to PDF from your browser
+2. **🔗 Open** button — opens the report in a new tab, which has a floating **🖨 Print / Save PDF** button in the bottom-right corner
 
 ---
 
@@ -139,9 +190,34 @@ To switch back, repeat the same Stop → Local DB → Start sequence.
 You can update all credentials and settings at runtime without restarting containers:
 
 1. Go to **Apollo → Settings**
-2. Update any field (API keys, model, max iterations, etc.)
+2. Update any field (API keys, model, max iterations, GitHub org, etc.)
 3. Click **⚡ Test Credentials** to verify before saving
 4. Click **Save Changes** — takes effect on the next RCA run immediately
+
+All settings are stored in `/app/apollo_settings.json` inside the rca-agent container and take effect with a 5-second cache TTL. **Docker env vars in `docker-compose.yml` take precedence over Python defaults** but are overridden by the Settings UI.
+
+---
+
+## Docker Compose Environment Variables
+
+The `rca-agent` service in `docker-compose.yml` has these key environment variables:
+
+```yaml
+environment:
+  DATABASE_URL: mysql+pymysql://root:varun@host.docker.internal:3306/rca_db
+  OBSERVABILITY_ADAPTER: "local"
+  CICD_ADAPTER: "mock"
+  GITHUB_ORG: "oscorpAI"
+  MODEL: "claude-haiku-4-5-20251001"
+  MAX_REACT_ITERATIONS: "20"      # max Claude iterations per RCA run
+```
+
+To change the model or iteration count permanently, edit `docker-compose.yml` and run:
+```bash
+docker compose build rca-agent && docker compose up -d rca-agent
+```
+
+Or change them at runtime via **Settings** in the Apollo UI (no restart needed).
 
 ---
 
@@ -172,13 +248,28 @@ Usually a missing `ANTHROPIC_API_KEY` in `.env`.
 
 Go to [console.anthropic.com](https://console.anthropic.com) → Settings → Limits → raise the monthly spend cap. The key itself is valid — you've just hit a self-imposed ceiling.
 
+**RCA stops early or shows "Analysis Failed"**
+
+1. Check `MAX_REACT_ITERATIONS` in `docker-compose.yml` — must be `"20"` not `"8"`
+2. Verify your GitHub PAT has `repo:read` scope
+3. Check: `docker compose logs rca-agent --tail=50` for specific errors
+
+**localhost:5000 shows "Waiting for logs…"**
+
+- The log file may not have any entries yet — trigger an error from the chaos buttons
+- Check: `docker compose logs ui` to confirm the ui container is running
+- Ensure the `app-logs` Docker volume is mounted: `docker exec rca-agent-ui-1 sh -c "ls /var/log/banking-app/"`
+
 ---
 
 ## Rebuilding after code changes
 
 ```bash
-# Rebuild and restart a single service
+# Rebuild and restart a single service (fastest)
 docker compose build rca-agent && docker compose up -d rca-agent
+
+# Rebuild the chaos-trigger UI (port 5000)
+docker compose build ui && docker compose up -d ui
 
 # Rebuild everything
 docker compose up --build
@@ -192,7 +283,7 @@ docker compose up --build
 docker compose down
 ```
 
-Data in MySQL persists (it's on the host). The Docker log volume (`app-logs`) is cleared on next `up --build`.
+Data in MySQL persists (it's on the host). The Docker log volume (`app-logs`) is preserved between restarts.
 
 ---
 
@@ -204,3 +295,17 @@ Data in MySQL persists (it's on the host). The Docker log volume (`app-logs`) is
 4. Run `docker compose up --build`
 
 No Python or Java code changes required.
+
+---
+
+## Port Reference
+
+| Port | Service | URL |
+|---|---|---|
+| 8000 | rca-agent (Apollo UI + API) | http://localhost:8000 |
+| 5000 | demo chaos UI (Flask) | http://localhost:5000 |
+| 8080 | banking-app | http://localhost:8080 |
+| 8081 | pricing-service | http://localhost:8081 |
+| 8082 | order-service | http://localhost:8082 |
+| 8001 | ingestion-agent control API | internal only |
+| 3306 | MySQL | host machine |

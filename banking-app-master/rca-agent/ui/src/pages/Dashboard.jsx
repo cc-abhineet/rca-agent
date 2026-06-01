@@ -8,10 +8,12 @@ import RCADashboard from '../components/RCADashboard'
 import RCAStreamPanel from '../components/RCAStreamPanel'
 import Settings from '../components/Settings'
 import TokenUsage from '../components/TokenUsage'
+import ReportsPage from '../components/ReportsPage'
 
 const PAGE_TITLES = {
   logs:     'Log Explorer',
   rca:      'RCA Dashboard',
+  reports:  'RCA Reports',
   tokens:   'Token Consumption',
   settings: 'Settings',
 }
@@ -126,10 +128,11 @@ export default function Dashboard() {
 
         {/* Page content */}
         <main className="page-content">
-          {activeNav !== 'settings' && activeNav !== 'tokens' && <StatsBar />}
+          {activeNav !== 'settings' && activeNav !== 'tokens' && activeNav !== 'reports' && <StatsBar />}
 
           {activeNav === 'logs'     && <LogViewer />}
           {activeNav === 'rca'      && <RCADashboard />}
+          {activeNav === 'reports'  && <ReportsPage />}
           {activeNav === 'tokens'   && <TokenUsage />}
           {activeNav === 'settings' && <Settings />}
         </main>

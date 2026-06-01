@@ -474,6 +474,63 @@ a { color: #60a5fa; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #0f1117; }
 ::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 3px; }
+
+/* Print button */
+.print-btn {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  padding: 13px 26px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(22,163,74,0.45);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.01em;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  z-index: 9999;
+}
+.print-btn:hover {
+  background: #15803d;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 28px rgba(22,163,74,0.55);
+}
+.print-btn:active { transform: translateY(0); }
+
+/* Print media */
+@media print {
+  .print-btn { display: none !important; }
+  body {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+  }
+  a { color: #2563eb !important; }
+  /* invert dark cards to white */
+  div[style*="background:#1e2030"],
+  div[style*="background:#12131f"],
+  div[style*="background:#0d0f1a"] {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+  }
+  div[style*="background:linear-gradient(135deg,#1a1c2e"] {
+    background: #f1f5f9 !important;
+    border-bottom-color: #e2e8f0 !important;
+  }
+  /* Keep text readable */
+  span[style*="color:#e2e8f0"],
+  div[style*="color:#e2e8f0"],
+  p[style*="color:#e2e8f0"] { color: #1a1a1a !important; }
+  span[style*="color:#94a3b8"],
+  div[style*="color:#94a3b8"] { color: #475569 !important; }
+  span[style*="color:#64748b"],
+  div[style*="color:#64748b"] { color: #64748b !important; }
+}
 """
 
 
@@ -505,6 +562,18 @@ def render_rca_html(report_dict: dict) -> str:
     service = report_dict.get("service_name", "RCA Report")
     severity = report_dict.get("incident_summary", {}).get("severity", "")
 
+    print_btn = (
+        '<button class="print-btn" onclick="window.print()" title="Print or save as PDF">'
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">'
+        '<polyline points="6 9 6 2 18 2 18 9"/>'
+        '<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>'
+        '<rect x="6" y="14" width="12" height="8"/>'
+        '</svg>'
+        'Print / Save as PDF'
+        '</button>'
+    )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -515,5 +584,6 @@ def render_rca_html(report_dict: dict) -> str:
 </head>
 <body>
 {''.join(sections)}
+{print_btn}
 </body>
 </html>"""

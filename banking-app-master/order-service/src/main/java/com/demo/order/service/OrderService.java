@@ -105,11 +105,9 @@ public class OrderService {
         // Fix: int resolved = quantity;
         // ───────────────────────────────────────────────────────────────────
         if (resolved <= 0) {
-            log.error("Order quantity {} is invalid after normalisation (resolved={}). " +
-                    "This is a bug introduced in commit d3adb33f — quantity should not be decremented.",
-                    quantity, resolved);
             throw new IllegalArgumentException(
-                    "Order quantity " + resolved + " is invalid");
+                    "Order quantity " + resolved + " is invalid after normalisation " +
+                    "(original=" + quantity + "). Bug d3adb33f — quantity should not be decremented.");
         }
         return resolved;
     }

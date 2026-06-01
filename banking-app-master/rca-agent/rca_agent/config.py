@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     github_org: str = "oscorpAI"
     database_url: str = "mysql+pymysql://root:root@localhost:3306/rca_db"
     model: str = "claude-haiku-4-5-20251001"
-    max_react_iterations: int = 8
+    max_react_iterations: int = 20
     observability_adapter: str = "local"   # "local" | "datadog"
     cicd_adapter: str = "mock"             # "mock" | "real"
 

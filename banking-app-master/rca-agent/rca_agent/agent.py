@@ -603,12 +603,18 @@ class RCAAgent:
                     })
 
             if response.stop_reason == "end_turn":
-                logger.warning("Agent reached end_turn without calling finish_rca")
-                break
+                logger.warning(
+                    "Agent reached end_turn at iteration %d without calling finish_rca — "
+                    "will force a summary report", iterations
+                )
+                break  # falls through to force-report block below
 
             if response.stop_reason != "tool_use":
-                logger.warning("Unexpected stop_reason: %s", response.stop_reason)
-                break
+                logger.warning(
+                    "Unexpected stop_reason=%s at iteration %d — will force a summary report",
+                    response.stop_reason, iterations
+                )
+                break  # falls through to force-report block below
 
             # Dispatch tool calls
             tool_results = []
@@ -640,6 +646,7 @@ class RCAAgent:
                         repos_investigated,
                         pending_memory_write_ref=[_pending_memory_write],
                         trace_callback=trace_callback,
+                        effective_model=effective_model,
                     )
                     # Update staged memory write ref (mutable via list wrapper)
                     # _dispatch signals a staged write by returning a sentinel key
@@ -681,8 +688,65 @@ class RCAAgent:
                 break
 
         if final_report is None:
+            logger.warning(
+                "Max iterations (%d) reached without finish_rca — forcing quick report", iterations
+            )
+            self._emit(trace_callback, {
+                "type": "reasoning",
+                "text": (
+                    f"Reached the maximum of {effective_iters} analysis iterations. "
+                    "Generating a summary report from the evidence gathered so far..."
+                ),
+            })
+            try:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"You have used all {effective_iters} allowed iterations. "
+                        "You MUST call finish_rca RIGHT NOW with your best analysis based on "
+                        "everything you have gathered so far. "
+                        "If root cause is uncertain, set confidence to 'low' and clearly state "
+                        "what evidence is still missing. "
+                        "Do NOT call any other tool — only finish_rca."
+                    ),
+                })
+                force_resp = client.messages.create(
+                    model=effective_model,
+                    max_tokens=4096,
+                    system=SYSTEM_PROMPT,
+                    tools=TOOLS,
+                    messages=messages,
+                )
+                for blk in force_resp.content:
+                    if (
+                        hasattr(blk, "type")
+                        and blk.type == "tool_use"
+                        and blk.name == "finish_rca"
+                    ):
+                        try:
+                            self._dispatch(
+                                blk.name,
+                                blk.input,
+                                error_log,
+                                repo_info,
+                                github_files_fetched,
+                                cache_hits,
+                                repos_investigated,
+                                pending_memory_write_ref=[_pending_memory_write],
+                                trace_callback=trace_callback,
+                                effective_model=effective_model,
+                            )
+                        except _FinishRCA as fin:
+                            final_report = fin.report
+                        break
+            except Exception as exc:
+                logger.error("Force-report API call failed: %s", exc, exc_info=True)
+
+        if final_report is None:
             raise RuntimeError(
-                f"RCA agent did not call finish_rca after {iterations} iterations"
+                f"RCA agent completed {iterations} iteration(s) without calling finish_rca, "
+                "and the forced summary report also failed. "
+                "Check logs for details — likely a GitHub PAT or API key issue."
             )
 
         # 5. Flush staged dependency memory write (must happen AFTER loop exits)
@@ -793,8 +857,9 @@ class RCAAgent:
         github_files_fetched: list[str],
         cache_hits: list[str],
         repos_investigated: list[str],
-        pending_memory_write_ref: list,      # list wrapper so we can mutate from caller
+        pending_memory_write_ref: list,
         trace_callback: Callable[[dict], None] | None = None,
+        effective_model: str = "",
     ) -> dict:
 
         if name == "get_repo_file":
@@ -934,6 +999,8 @@ class RCAAgent:
         if name == "finish_rca":
             # Claude passes {"report": {<full report fields>}}
             report_data = inp.get("report", inp)
+
+            # ── Guaranteed scalar fields ─────────────────────────────────────
             report_data.setdefault("schema_version", "1.1")
             report_data.setdefault("rca_id", str(uuid.uuid4()))
             report_data.setdefault("error_log_id", error_log.id)
@@ -941,14 +1008,60 @@ class RCAAgent:
             report_data.setdefault("generated_at", datetime.now(timezone.utc).isoformat())
             report_data.setdefault("service_boundary_crossed", False)
             report_data.setdefault("upstream_service", None)
+            report_data.setdefault("contributing_factors", [])
+            report_data.setdefault("evidence", [])
+            report_data.setdefault("prevention_recommendations", [])
+
+            # ── analysis_metadata — MUST be set up first; used by root_cause fallback below ──
             report_data.setdefault("analysis_metadata", {})
-            report_data["analysis_metadata"]["github_files_fetched"] = github_files_fetched
-            report_data["analysis_metadata"]["cache_hits"] = cache_hits
-            report_data["analysis_metadata"]["repos_investigated"] = repos_investigated
-            report_data["analysis_metadata"]["model"] = effective_model
-            report_data["analysis_metadata"].setdefault("react_iterations", 0)
-            report_data["analysis_metadata"].setdefault("deployment_record_used", False)
-            report_data["analysis_metadata"].setdefault("repo_discovered_via", "unknown")
+            meta = report_data["analysis_metadata"]
+            meta["github_files_fetched"] = github_files_fetched
+            meta["cache_hits"]           = cache_hits
+            meta["repos_investigated"]   = repos_investigated
+            meta["model"]                = effective_model
+            meta.setdefault("react_iterations", 0)
+            meta.setdefault("deployment_record_used", False)
+            meta.setdefault("repo_discovered_via", "unknown")
+
+            # ── Required nested objects — safe fallbacks so Pydantic never fails ──
+            occurred = error_log.occurred_at.isoformat() if hasattr(error_log.occurred_at, "isoformat") else str(error_log.occurred_at)
+            report_data.setdefault("incident_summary", {
+                "what": error_log.error_message or error_log.error_type or "Unknown error",
+                "when": occurred,
+                "environment": error_log.environment or "production",
+                "severity": error_log.severity or "ERROR",
+            })
+            report_data.setdefault("timeline", [
+                {"timestamp": occurred, "event": f"{error_log.error_type} occurred in {error_log.service_name}"}
+            ])
+            if "root_cause" not in report_data:
+                report_data["root_cause"] = {
+                    "summary": (
+                        f"Analysis incomplete after {meta.get('react_iterations', 0)} iterations. "
+                        f"Error: {error_log.error_message or error_log.error_type}"
+                    ),
+                    "confidence": "low",
+                    "confidence_reason": "Agent did not complete full investigation",
+                    "code_reference": {
+                        "file": "unknown",
+                        "repo": repo_info.get("repo", error_log.service_name),
+                    },
+                }
+            else:
+                rc = report_data["root_cause"]
+                if isinstance(rc, dict) and "code_reference" not in rc:
+                    rc["code_reference"] = {
+                        "file": "unknown",
+                        "repo": repo_info.get("repo", error_log.service_name),
+                    }
+            report_data.setdefault("impact_assessment", {
+                "affected_service": error_log.service_name,
+                "affected_environment": error_log.environment or "production",
+            })
+            report_data.setdefault("suggested_solutions", [
+                {"priority": 1, "effort": "medium", "title": "Investigate root cause", "description": "Review the stack trace and recent commits for this service."}
+            ])
+
             raise _FinishRCA(RCAReport(**report_data))
 
         logger.warning("Unknown tool: %s", name)

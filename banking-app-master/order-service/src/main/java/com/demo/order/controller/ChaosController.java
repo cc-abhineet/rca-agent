@@ -58,7 +58,7 @@ public class ChaosController {
      */
     @PostMapping("/cross-service-npe")
     public ResponseEntity<Void> triggerCrossServiceNpe() {
-        log.warn("CHAOS: triggering cross-service NPE scenario (Bug A)");
+        log.info("CHAOS: triggering cross-service NPE scenario (Bug A)");
         OrderDto.CreateRequest req = OrderDto.CreateRequest.builder()
                 .customerId("CHAOS-CUSTOMER")
                 .sku("SKU-001")
@@ -78,7 +78,7 @@ public class ChaosController {
      */
     @PostMapping("/quantity-off-by-one")
     public ResponseEntity<Void> triggerQuantityOffByOne() {
-        log.warn("CHAOS: triggering quantity off-by-one scenario (Bug B)");
+        log.info("CHAOS: triggering quantity off-by-one scenario (Bug B)");
         OrderDto.CreateRequest req = OrderDto.CreateRequest.builder()
                 .customerId("CHAOS-CUSTOMER")
                 .sku("SKU-002")

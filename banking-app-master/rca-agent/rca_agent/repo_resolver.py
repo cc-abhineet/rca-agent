@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def _effective_org() -> str:
     """Return GitHub org from Settings-UI overlay, falling back to env."""
-    return overlay_get("github_org") or _effective_org()
+    return overlay_get("github_org") or settings.github_org
 
 
 class RepoResolver:

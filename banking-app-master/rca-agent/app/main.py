@@ -29,6 +29,45 @@ obs_adapter = LocalDBAdapter()
 cicd_adapter = MockCICDAdapter()
 agent = RCAAgent(obs_adapter=obs_adapter, cicd_adapter=cicd_adapter)
 
+# ── Pub-sub for SSE streams ───────────────────────────────────────────────────
+# Keyed by error_log_id. Allows multiple browser tabs / reconnects to subscribe
+# to the same running agent without starting a duplicate agent thread.
+_active_jobs: dict = {}   # error_log_id -> {"queues": [Queue, ...], "done": bool}
+_active_jobs_lock = threading.Lock()
+
+
+def _job_broadcast(error_log_id: str, event: dict) -> None:
+    """Deliver an event to every subscriber queue for this job."""
+    with _active_jobs_lock:
+        job = _active_jobs.get(error_log_id)
+        if not job:
+            return
+        dead = []
+        for q in job["queues"]:
+            try:
+                q.put_nowait(event)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            try:
+                job["queues"].remove(q)
+            except ValueError:
+                pass
+
+
+def _job_finish(error_log_id: str) -> None:
+    """Signal all subscribers that the job is done (sends sentinel None)."""
+    with _active_jobs_lock:
+        job = _active_jobs.get(error_log_id)
+        if not job:
+            return
+        job["done"] = True
+        for q in job["queues"]:
+            try:
+                q.put_nowait(None)
+            except Exception:
+                pass
+
 # Path to the seeded IDs file (written by demo_seed_data.py)
 _SEEDED_IDS_PATH = Path(__file__).parent.parent.parent / "demo-repos" / "seeded_ids.json"
 # Also check next to the script itself (for flexibility)
@@ -770,64 +809,91 @@ def api_trigger_rca(req: TriggerRCARequest):
 
 @app.get("/api/rca/stream/{error_log_id}")
 def api_rca_stream(error_log_id: str):
-    """SSE stream alias — GET version for EventSource compatibility."""
-    event_queue: queue.Queue = queue.Queue()
+    """
+    SSE stream — GET version for EventSource compatibility.
 
-    def trace_callback(event: dict) -> None:
-        event_queue.put(event)
+    Uses a pub-sub model so reconnecting browsers subscribe to the SAME
+    running agent instead of starting a duplicate agent thread.
+    """
+    sub_queue: queue.Queue = queue.Queue(maxsize=512)
 
-    def agent_thread():
-        try:
-            execute(
-                "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
-                (error_log_id,),
-            )
-            report = agent.run(error_log_id, trace_callback=trace_callback, **_effective_agent_settings())
-            execute(
-                """UPDATE error_logs
-                   SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
-                   WHERE id=%s""",
-                (json.dumps(report.model_dump()), error_log_id),
-            )
-            event_queue.put({
-                "type": "done",
-                "report": report.model_dump(),
-                "ts": datetime.now(timezone.utc).isoformat(),
-            })
-        except Exception as exc:
-            execute(
-                "UPDATE error_logs SET rca_status='failed', rca_error=%s WHERE id=%s",
-                (str(exc), error_log_id),
-            )
-            event_queue.put({
-                "type": "error",
-                "message": str(exc),
-                "ts": datetime.now(timezone.utc).isoformat(),
-            })
-        finally:
-            event_queue.put(None)
+    with _active_jobs_lock:
+        job = _active_jobs.get(error_log_id)
+        already_running = job is not None and not job.get("done", False)
+        if already_running:
+            # Just attach — no new agent
+            job["queues"].append(sub_queue)
+        else:
+            # Register a fresh job slot
+            _active_jobs[error_log_id] = {"queues": [sub_queue], "done": False}
 
-    thread = threading.Thread(target=agent_thread, daemon=True)
-    thread.start()
+    if not already_running:
+        def agent_thread():
+            try:
+                execute(
+                    "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
+                    (error_log_id,),
+                )
+                report = agent.run(
+                    error_log_id,
+                    trace_callback=lambda ev: _job_broadcast(error_log_id, ev),
+                    **_effective_agent_settings(),
+                )
+                execute(
+                    """UPDATE error_logs
+                       SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
+                       WHERE id=%s""",
+                    (json.dumps(report.model_dump()), error_log_id),
+                )
+                _job_broadcast(error_log_id, {
+                    "type": "done",
+                    "report": report.model_dump(),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                })
+            except Exception as exc:
+                execute(
+                    "UPDATE error_logs SET rca_status='failed', rca_error=%s WHERE id=%s",
+                    (str(exc), error_log_id),
+                )
+                _job_broadcast(error_log_id, {
+                    "type": "error",
+                    "message": str(exc),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                })
+            finally:
+                _job_finish(error_log_id)
+                # Keep the slot for 60s so late reconnectors get the done signal
+                def _cleanup():
+                    import time as _time
+                    _time.sleep(60)
+                    with _active_jobs_lock:
+                        _active_jobs.pop(error_log_id, None)
+                threading.Thread(target=_cleanup, daemon=True).start()
+
+        threading.Thread(target=agent_thread, daemon=True).start()
 
     def sse_generator():
-        while True:
-            try:
-                event = event_queue.get(timeout=120)
-            except queue.Empty:
-                yield "data: {\"type\": \"error\", \"message\": \"Timed out waiting for agent\"}\n\n"
-                break
-            if event is None:
-                break
-            yield f"data: {json.dumps(event, default=str)}\n\n"
+        try:
+            while True:
+                try:
+                    event = sub_queue.get(timeout=120)
+                except queue.Empty:
+                    yield "data: {\"type\": \"error\", \"message\": \"Timed out waiting for agent\"}\n\n"
+                    break
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event, default=str)}\n\n"
+        finally:
+            # Unsubscribe this client when it disconnects
+            with _active_jobs_lock:
+                j = _active_jobs.get(error_log_id)
+                if j and sub_queue in j.get("queues", []):
+                    j["queues"].remove(sub_queue)
 
     return StreamingResponse(
         sse_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

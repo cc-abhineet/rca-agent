@@ -53,23 +53,21 @@ public class ChaosController {
 
     @PostMapping("/{scenario}")
     public ResponseEntity<Void> triggerChaos(@PathVariable String scenario) {
-        log.warn("CHAOS TRIGGER: scenario={} at {}", scenario, LocalDateTime.now());
+        log.info("CHAOS TRIGGER: scenario={} at {}", scenario, LocalDateTime.now());
         return switch (scenario) {
             case "null-pointer" -> {
-                log.error("Simulating NullPointerException in PricingService.calculatePrice");
                 String sku = null;
-                // deliberate null dereference — real NPE with realistic stack trace
+                // deliberate null dereference — GlobalExceptionHandler logs the full NPE stack trace
                 int len = sku.length();
                 yield ResponseEntity.<Void>ok().build();
             }
             case "invalid-sku" -> {
-                log.warn("Simulating InvalidSkuException for sku=SKU-CHAOS");
+                log.info("Simulating invalid SKU lookup for sku=SKU-CHAOS");
                 throw new com.demo.pricing.exception.InvalidSkuException("SKU-CHAOS");
             }
             case "arithmetic" -> {
-                log.error("Simulating ArithmeticException in discount calculation");
                 int zero = 0;
-                int result = 100 / zero;  // ArithmeticException: / by zero
+                int result = 100 / zero;  // ArithmeticException — GlobalExceptionHandler logs it
                 yield ResponseEntity.<Void>ok().build();
             }
             default -> {

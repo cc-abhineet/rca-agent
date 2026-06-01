@@ -86,7 +86,7 @@ public class ChaosController {
      */
     @PostMapping("/{scenario}")
     public ResponseEntity<Void> triggerChaos(@PathVariable String scenario) throws Exception {
-        log.warn("CHAOS TRIGGER: scenario={} at {}", scenario, LocalDateTime.now());
+        log.info("CHAOS TRIGGER: scenario={} at {}", scenario, LocalDateTime.now());
 
         return switch (scenario) {
             case "null-pointer"        -> triggerNullPointer();
@@ -113,9 +113,8 @@ public class ChaosController {
      * Represents a code defect where an optional value was not guarded.
      */
     private ResponseEntity<Void> triggerNullPointer() {
-        log.error("Simulating NullPointerException in account lookup");
         String accountId = null;
-        // Deliberate null dereference to produce a real NPE with realistic stack trace
+        // Deliberate null dereference — GlobalExceptionHandler logs the full NPE stack trace
         int length = accountId.length(); // NullPointerException here
         return ResponseEntity.ok().build(); // unreachable
     }
@@ -125,7 +124,6 @@ public class ChaosController {
      * Represents infrastructure-level dependency failures (pool exhaustion, network timeout).
      */
     private ResponseEntity<Void> triggerDbConnection() {
-        log.error("Simulating database connection failure — pool exhausted");
         throw new RuntimeException(
             "Unable to acquire JDBC Connection from pool. "
             + "Connection pool exhausted after 30000ms. "
@@ -140,7 +138,7 @@ public class ChaosController {
      * Represents a business logic error path.
      */
     private ResponseEntity<Void> triggerInsufficientFunds() {
-        log.warn("Simulating InsufficientFundsException for chaos account CHAOS-001");
+        log.info("Simulating insufficient funds for chaos account CHAOS-001");
         BigDecimal available  = new BigDecimal("0.01");
         BigDecimal requested  = new BigDecimal("10000.00");
         throw new InsufficientFundsException(available, requested);
@@ -151,7 +149,6 @@ public class ChaosController {
      * Sleeps for 35 seconds (beyond typical 30s gateway timeout) then throws.
      */
     private ResponseEntity<Void> triggerTimeout() throws Exception {
-        log.error("Simulating timeout — downstream service payments-gateway did not respond");
         throw new TimeoutException(
             "Request processing exceeded deadline of 30000ms. "
             + "Downstream service payments-gateway did not respond in time."
@@ -164,7 +161,7 @@ public class ChaosController {
      * (GlobalExceptionHandler formats this consistently).
      */
     private ResponseEntity<Void> triggerValidation() {
-        log.warn("Simulating validation failure for malformed account data");
+        log.info("Simulating validation failure for malformed account data");
         throw new IllegalArgumentException(
             "Validation failed for AccountDto.CreateRequest: "
             + "field 'ownerName' must not be blank; "

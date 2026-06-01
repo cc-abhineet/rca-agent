@@ -132,7 +132,7 @@ services:
       CICD_ADAPTER: "mock"
       GITHUB_ORG: "oscorpAI"
       MODEL: "claude-haiku-4-5-20251001"
-      MAX_REACT_ITERATIONS: "8"
+      MAX_REACT_ITERATIONS: "20"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

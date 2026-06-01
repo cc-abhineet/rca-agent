@@ -65,6 +65,16 @@ export function AppProvider({ children }) {
     }
   }, [monitoringActive])
 
+  const [newReportCount, setNewReportCount] = useState(0)
+
+  const incrementNewReports = useCallback(() => {
+    setNewReportCount(c => c + 1)
+  }, [])
+
+  const clearNewReports = useCallback(() => {
+    setNewReportCount(0)
+  }, [])
+
   const openStream = useCallback((id, service, errorType) => {
     setStreamTarget({ id, service, errorType })
   }, [])
@@ -80,6 +90,7 @@ export function AppProvider({ children }) {
       monitoringActive, monitoringLoading, toggleMonitoring,
       streamTarget, openStream, closeStream,
       toast, showToast,
+      newReportCount, incrementNewReports, clearNewReports,
     }}>
       {children}
     </AppContext.Provider>
