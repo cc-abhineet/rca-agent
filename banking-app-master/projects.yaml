@@ -20,7 +20,7 @@ projects:
   - id: banking-app
     name: "Banking App"
     description: "Spring Boot banking application with account management and transactions"
-    github_org: oscorpAI
+    github_org: apollo
     github_repo: banking-app
     default_branch: main
     language: java
@@ -39,7 +39,7 @@ projects:
   - id: pricing-service
     name: "Pricing Service"
     description: "Spring Boot pricing engine. v2.1.0 renamed 'discount' → 'discountRate'."
-    github_org: oscorpAI
+    github_org: apollo
     github_repo: pricing-service
     default_branch: main
     language: java
@@ -58,7 +58,7 @@ projects:
   - id: order-service
     name: "Order Service"
     description: "Spring Boot order service. Calls pricing-service. Contains Bug A + Bug B."
-    github_org: oscorpAI
+    github_org: apollo
     github_repo: order-service
     default_branch: main
     language: java

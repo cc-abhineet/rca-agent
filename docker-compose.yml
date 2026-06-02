@@ -130,7 +130,8 @@ services:
       DATABASE_URL: mysql+pymysql://root:varun@host.docker.internal:3306/rca_db
       OBSERVABILITY_ADAPTER: "local"
       CICD_ADAPTER: "mock"
-      GITHUB_ORG: "oscorpAI"
+      GITHUB_ORG: "apollo"
+      GITLAB_URL: "http://devopstools-1761743684.us-east-2.elb.amazonaws.com"
       MODEL: "claude-haiku-4-5-20251001"
       MAX_REACT_ITERATIONS: "20"
     extra_hosts:

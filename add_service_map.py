@@ -35,11 +35,17 @@ import os
 import sys
 from pathlib import Path
 
-# ── Load .env from rca-agent directory so DATABASE_URL is available ──────────
-_ENV_PATH = Path(__file__).parent / "banking-app-master" / "rca-agent" / ".env"
-if _ENV_PATH.exists():
-    from dotenv import load_dotenv
-    load_dotenv(_ENV_PATH)
+# ── Load .env — check root first, then banking-app-master/rca-agent/.env ─────
+from dotenv import load_dotenv
+
+_ENV_CANDIDATES = [
+    Path(__file__).parent / ".env",                              # root (preferred)
+    Path(__file__).parent / "banking-app-master" / "rca-agent" / ".env",  # legacy
+]
+for _env_path in _ENV_CANDIDATES:
+    if _env_path.exists():
+        load_dotenv(_env_path)
+        break
 
 
 def _get_engine(db_url: str | None):
@@ -123,7 +129,7 @@ def _load_from_projects_yaml() -> list[dict]:
         print(f"WARNING: projects.yaml not found at {_PROJECTS_YAML}")
         return []
 
-    with open(_PROJECTS_YAML) as fh:
+    with open(_PROJECTS_YAML, encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
 
     services = []

@@ -996,6 +996,69 @@ def api_token_usage(recent_limit: int = Query(50, ge=1, le=200)):
     return {"summary": summary, "by_model": by_model, "recent": recent}
 
 
+# ── Token Usage by Incident ──────────────────────────────────────────────────
+
+@app.get("/api/token-usage/by-incident")
+def api_token_usage_by_incident(limit: int = Query(50, ge=1, le=200)):
+    """Token usage grouped by error_log_id. No cross-table JOIN to avoid collation issues."""
+    # Step 1 — aggregate token_usage only (single table, no collation conflict)
+    tu_rows = execute(
+        """SELECT
+               error_log_id,
+               COUNT(*)                           AS call_count,
+               SUM(input_tokens)                 AS input_tokens,
+               SUM(output_tokens)                AS output_tokens,
+               SUM(cache_read_tokens)            AS cache_read_tokens,
+               SUM(cache_creation_tokens)        AS cache_creation_tokens,
+               SUM(input_tokens + output_tokens) AS total_tokens,
+               SUM(estimated_cost_usd)           AS total_cost,
+               MAX(iteration_num)                AS max_iteration,
+               MIN(created_at)                   AS started_at
+           FROM token_usage
+           WHERE error_log_id IS NOT NULL
+           GROUP BY error_log_id
+           ORDER BY MIN(created_at) DESC
+           LIMIT %s""",
+        (limit,),
+    )
+
+    if not tu_rows:
+        return {"incidents": []}
+
+    # Step 2 — fetch error_log metadata for those IDs (single table, no join)
+    ids = [str(r["error_log_id"]) for r in tu_rows]
+    placeholders = ",".join(["%s"] * len(ids))
+    el_rows = execute(
+        f"SELECT id, service_name, error_type, occurred_at, rca_status "
+        f"FROM error_logs WHERE id IN ({placeholders})",
+        ids,
+    )
+    el_map = {str(r["id"]): r for r in el_rows}
+
+    # Step 3 — merge in Python (zero DB collation risk)
+    incidents = []
+    for row in tu_rows:
+        eid = str(row["error_log_id"])
+        el  = el_map.get(eid, {})
+        incidents.append({
+            "error_log_id":         eid,
+            "service_name":         el.get("service_name") or "unknown",
+            "error_type":           el.get("error_type")   or "UnknownError",
+            "occurred_at":          str(el["occurred_at"])[:19] if el.get("occurred_at") else "",
+            "rca_status":           el.get("rca_status")   or "pending",
+            "call_count":           int(row.get("call_count")           or 0),
+            "input_tokens":         int(row.get("input_tokens")         or 0),
+            "output_tokens":        int(row.get("output_tokens")        or 0),
+            "cache_read_tokens":    int(row.get("cache_read_tokens")    or 0),
+            "cache_creation_tokens":int(row.get("cache_creation_tokens")or 0),
+            "total_tokens":         int(row.get("total_tokens")         or 0),
+            "total_cost":           float(row.get("total_cost")         or 0),
+            "max_iteration":        row.get("max_iteration"),
+            "started_at":           str(row["started_at"])[:19] if row.get("started_at") else "",
+        })
+    return {"incidents": incidents}
+
+
 # ── Serve React UI (MUST be last) ────────────────────────────────────────────
 
 _UI_DIST = Path(__file__).parent.parent / "ui" / "dist"

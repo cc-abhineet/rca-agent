@@ -47,6 +47,9 @@ export const fetchDatadogLogs = (limit = 50) =>
 export const fetchTokenUsage = (recentLimit = 50) =>
   request(`/api/token-usage?recent_limit=${recentLimit}`)
 
+export const fetchTokenUsageByIncident = (limit = 50) =>
+  request(`/api/token-usage/by-incident?limit=${limit}`)
+
 // Monitoring control
 export const fetchMonitoring = () => request('/api/monitoring')
 

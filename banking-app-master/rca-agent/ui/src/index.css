@@ -2377,10 +2377,221 @@ body.rca-panel-open { overflow: hidden; }
   line-height: 1.6;
 }
 
+/* ── Incident cards ─────────────────────────────────────────────────────────── */
+.tu-incident-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.tu-incident-card {
+  position: relative;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+}
+.tu-incident-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.tu-incident-accent {
+  width: 4px;
+  flex-shrink: 0;
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
+}
+
+.tu-incident-body { flex: 1; min-width: 0; }
+
+.tu-inc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4) var(--sp-5);
+  gap: var(--sp-4);
+  transition: background 0.12s;
+  flex-wrap: wrap;
+}
+.tu-inc-header:hover { background: rgba(255,255,255,0.02); }
+
+.tu-inc-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  flex: 1;
+}
+
+.tu-inc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.tu-inc-names { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; flex-wrap: wrap; }
+.tu-inc-service { font-weight: 700; font-size: 13.5px; letter-spacing: 0.01em; }
+.tu-inc-error   { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); }
+.tu-inc-time    { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+
+.tu-inc-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.tu-inc-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.tu-inc-pill {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.tu-inc-cost-val {
+  font-size: 13px;
+  color: var(--success);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.tu-inc-tokens-val {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  min-width: 52px;
+  text-align: right;
+}
+
+.tu-inc-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  padding: 3px 7px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.12s;
+  line-height: 1;
+}
+.tu-inc-toggle:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+/* Token bar section inside incident card */
+.tu-inc-bar-section {
+  padding: 0 var(--sp-5) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.tu-inc-bar-labels {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  flex-wrap: wrap;
+}
+
+.tu-inc-bar-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.tu-inc-occurred {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: inherit;
+}
+
+/* Expanded calls inside incident */
+.tu-inc-calls-wrap {
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.18);
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.tu-inc-calls-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.tu-inc-inner-table { font-size: 12px; }
+
+.tu-inc-foot td {
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-2);
+  background: rgba(255,255,255,0.02);
+}
+
+/* All-calls collapse button */
+.tu-collapse-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.12s;
+}
+.tu-collapse-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* Incident ID chip in all-calls table */
+.tu-inc-id-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  color: var(--text-muted);
+}
+
 /* Responsive */
 @media (max-width: 900px) {
   .tu-hero-row { grid-template-columns: repeat(2, 1fr); }
   .tu-model-grid-outer { grid-template-columns: 1fr; }
+  .tu-inc-meta { gap: var(--sp-2); }
+  .tu-inc-occurred { margin-left: 0; }
+}
+@media (max-width: 600px) {
+  .tu-hero-row { grid-template-columns: 1fr; }
+  .tu-inc-header { flex-direction: column; align-items: flex-start; }
 }
 @media (max-width: 560px) {
   .tu-hero-row { grid-template-columns: 1fr; }
