@@ -1,172 +1,115 @@
 package com.demo.banking.controller;
 
-import com.demo.banking.exception.ChaosException;
-import com.demo.banking.exception.InsufficientFundsException;
+import com.demo.banking.dto.TransactionDto;
+import com.demo.banking.service.AccountService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeoutException;
 
 /**
- * ChaosController — intentional error injection for demo and RCA testing.
+ * ChaosController — thin HTTP trigger layer for RCA scenario testing.
  *
- * Each POST /chaos/{scenario} throws an exception that propagates through
- * GlobalExceptionHandler and is logged by Datadog APM / the Error Ingestion Agent.
+ * Each endpoint immediately delegates to AccountService so that exceptions
+ * and their stack traces originate in the real business layer, NOT here.
  *
- * GET /chaos/scenarios returns the full catalogue of available scenarios.
+ * RULE: zero business logic in this class. Construct the minimal input
+ * needed to exercise the planted bug, then call AccountService and return.
  */
 @RestController
 @RequestMapping("/chaos")
+@RequiredArgsConstructor
 @Slf4j
 public class ChaosController {
 
-    // ── Scenario catalogue ─────────────────────────────────────────────────
+    private final AccountService accountService;
 
     private static final List<Map<String, String>> SCENARIOS = List.of(
         Map.of(
             "id",          "null-pointer",
-            "name",        "NullPointerException",
-            "description", "Triggers a NullPointerException in the account service layer",
-            "severity",    "ERROR"
-        ),
-        Map.of(
-            "id",          "db-connection",
-            "name",        "Database Connection Failure",
-            "description", "Simulates a database connection pool exhaustion / timeout",
+            "name",        "NullPointerException in AccountService.getAccountEnrichment",
+            "description", "Calls getAccountEnrichment(1) — enrichment cache miss → NPE inside AccountService",
             "severity",    "ERROR"
         ),
         Map.of(
             "id",          "insufficient-funds",
-            "name",        "Insufficient Funds",
-            "description", "Triggers an InsufficientFundsException for chaos account CHAOS-001",
-            "severity",    "WARN"
-        ),
-        Map.of(
-            "id",          "timeout",
-            "name",        "Request Timeout",
-            "description", "Sleeps for 35 seconds then throws a TimeoutException",
+            "name",        "InsufficientFundsException in AccountService.withdraw",
+            "description", "Withdraws $9,999,999.99 from account 1 — InsufficientFundsException inside AccountService",
             "severity",    "ERROR"
         ),
         Map.of(
-            "id",          "validation",
-            "name",        "Validation Failure",
-            "description", "Triggers a MethodArgumentNotValidException with malformed account data",
-            "severity",    "WARN"
+            "id",          "db-connection",
+            "name",        "RuntimeException in AccountService.processBatchStatement",
+            "description", "Triggers secondary JDBC pool exhaustion → RuntimeException inside AccountService",
+            "severity",    "ERROR"
+        ),
+        Map.of(
+            "id",          "account-not-found",
+            "name",        "AccountNotFoundException in AccountService",
+            "description", "Looks up account id=999999999 → AccountNotFoundException inside AccountService.findAccountById",
+            "severity",    "ERROR"
         )
     );
 
-    // ── List scenarios ─────────────────────────────────────────────────────
-
-    /**
-     * GET /chaos/scenarios
-     * Returns all available chaos scenarios with IDs and descriptions.
-     */
     @GetMapping("/scenarios")
     public ResponseEntity<Map<String, Object>> listScenarios() {
-        log.info("GET /chaos/scenarios - returning {} scenarios", SCENARIOS.size());
         return ResponseEntity.ok(Map.of(
-            "scenarios",  SCENARIOS,
-            "count",      SCENARIOS.size(),
-            "timestamp",  LocalDateTime.now().toString()
+            "scenarios", SCENARIOS,
+            "count",     SCENARIOS.size(),
+            "timestamp", LocalDateTime.now().toString()
         ));
     }
 
-    // ── Trigger endpoint ───────────────────────────────────────────────────
-
     /**
-     * POST /chaos/{scenario}
-     * Triggers the specified chaos scenario by throwing an appropriate exception.
-     * The exception propagates through GlobalExceptionHandler for consistent formatting.
+     * Delegates to AccountService.getAccountEnrichment — NullPointerException
+     * originates there when the enrichment cache returns null for account 1.
      */
-    @PostMapping("/{scenario}")
-    public ResponseEntity<Void> triggerChaos(@PathVariable String scenario) throws Exception {
-        log.info("CHAOS TRIGGER: scenario={} at {}", scenario, LocalDateTime.now());
-
-        return switch (scenario) {
-            case "null-pointer"        -> triggerNullPointer();
-            case "db-connection"       -> triggerDbConnection();
-            case "insufficient-funds"  -> triggerInsufficientFunds();
-            case "timeout"             -> triggerTimeout();
-            case "validation"          -> triggerValidation();
-            default -> {
-                log.error("Unknown chaos scenario requested: {}", scenario);
-                throw new ChaosException(
-                    scenario,
-                    "Unknown scenario",
-                    "No chaos scenario found with id='" + scenario + "'. "
-                    + "Call GET /chaos/scenarios for the full list."
-                );
-            }
-        };
-    }
-
-    // ── Individual scenario implementations ───────────────────────────────
-
-    /**
-     * Simulates a NullPointerException — the classic unhandled null dereference.
-     * Represents a code defect where an optional value was not guarded.
-     */
-    private ResponseEntity<Void> triggerNullPointer() {
-        String accountId = null;
-        // Deliberate null dereference — GlobalExceptionHandler logs the full NPE stack trace
-        int length = accountId.length(); // NullPointerException here
-        return ResponseEntity.ok().build(); // unreachable
+    @PostMapping("/null-pointer")
+    public ResponseEntity<Void> triggerNullPointer() {
+        log.info("CHAOS: triggering null-pointer via AccountService.getAccountEnrichment(1)");
+        accountService.getAccountEnrichment(1L);
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Simulates a database connection failure.
-     * Represents infrastructure-level dependency failures (pool exhaustion, network timeout).
+     * Delegates to AccountService.withdraw — InsufficientFundsException
+     * originates there when the requested amount exceeds account balance.
      */
-    private ResponseEntity<Void> triggerDbConnection() {
-        throw new RuntimeException(
-            "Unable to acquire JDBC Connection from pool. "
-            + "Connection pool exhausted after 30000ms. "
-            + "com.zaxxer.hikari.pool.HikariPool$PoolInitializationException: "
-            + "Failed to initialize pool: Connection to rca-db.us-east-1.rds.amazonaws.com:5432 refused. "
-            + "Check that the hostname and port are correct and that the postmaster is accepting TCP/IP connections."
-        );
+    @PostMapping("/insufficient-funds")
+    public ResponseEntity<Void> triggerInsufficientFunds() {
+        log.info("CHAOS: triggering insufficient-funds via AccountService.withdraw(1, 9999999.99)");
+        TransactionDto.MoneyRequest req = TransactionDto.MoneyRequest.builder()
+                .amount(new BigDecimal("9999999.99"))
+                .description("chaos: large withdrawal test")
+                .build();
+        accountService.withdraw(1L, req);
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Simulates an InsufficientFundsException for the chaos test account.
-     * Represents a business logic error path.
+     * Delegates to AccountService.processBatchStatement — RuntimeException
+     * originates there when the secondary JDBC pool is exhausted.
      */
-    private ResponseEntity<Void> triggerInsufficientFunds() {
-        log.info("Simulating insufficient funds for chaos account CHAOS-001");
-        BigDecimal available  = new BigDecimal("0.01");
-        BigDecimal requested  = new BigDecimal("10000.00");
-        throw new InsufficientFundsException(available, requested);
+    @PostMapping("/db-connection")
+    public ResponseEntity<Void> triggerDbConnection() {
+        log.info("CHAOS: triggering db-connection via AccountService.processBatchStatement");
+        accountService.processBatchStatement("BATCH-CHAOS-001");
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Simulates a slow external dependency causing a request timeout.
-     * Sleeps for 35 seconds (beyond typical 30s gateway timeout) then throws.
+     * Delegates to AccountService.getAccountById — AccountNotFoundException
+     * originates there when no account with id=999999999 exists.
      */
-    private ResponseEntity<Void> triggerTimeout() throws Exception {
-        throw new TimeoutException(
-            "Request processing exceeded deadline of 30000ms. "
-            + "Downstream service payments-gateway did not respond in time."
-        );
-    }
-
-    /**
-     * Simulates a validation failure on account creation.
-     * Throws IllegalArgumentException with detailed field validation message
-     * (GlobalExceptionHandler formats this consistently).
-     */
-    private ResponseEntity<Void> triggerValidation() {
-        log.info("Simulating validation failure for malformed account data");
-        throw new IllegalArgumentException(
-            "Validation failed for AccountDto.CreateRequest: "
-            + "field 'ownerName' must not be blank; "
-            + "field 'initialBalance' must be >= 0; "
-            + "field 'accountType' must be one of [CHECKING, SAVINGS, BUSINESS]"
-        );
+    @PostMapping("/account-not-found")
+    public ResponseEntity<Void> triggerAccountNotFound() {
+        log.info("CHAOS: triggering account-not-found via AccountService.getAccountById(999999999)");
+        accountService.getAccountById(999_999_999L);
+        return ResponseEntity.ok().build();
     }
 }

@@ -15,7 +15,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidSkuException.class)
     public ResponseEntity<ErrorResponse> handleInvalidSku(InvalidSkuException ex) {
-        log.warn("Invalid SKU requested: {}", ex.getMessage());
+        log.error("InvalidSkuException: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
     }

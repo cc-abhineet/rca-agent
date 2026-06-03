@@ -25,8 +25,9 @@ env/
 
 # ── Node / React ──────────────────────────────────────────────────────────────
 node_modules/
-banking-app-master/rca-agent/ui/dist/
-banking-app-master/rca-agent/ui/.vite/
+apollo-agent/rca-agent/ui/dist/
+apollo-agent/rca-agent/ui/.vite/
+apollo-agent/rca-agent/ui/src/dist/
 .npm
 npm-debug.log*
 yarn-debug.log*

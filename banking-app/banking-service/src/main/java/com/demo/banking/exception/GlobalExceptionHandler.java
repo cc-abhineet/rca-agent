@@ -15,14 +15,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccountNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(AccountNotFoundException ex) {
-        log.warn("Account not found: {}", ex.getMessage());
+        log.error("AccountNotFoundException: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
     }
 
     @ExceptionHandler(InsufficientFundsException.class)
     public ResponseEntity<ErrorResponse> handleInsufficientFunds(InsufficientFundsException ex) {
-        log.warn("Insufficient funds: {}", ex.getMessage());
+        log.error("InsufficientFundsException: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }
@@ -41,14 +41,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
-        log.error("Illegal state: {}", ex.getMessage());
+        log.error("IllegalStateException: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse(HttpStatus.CONFLICT.value(), ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("Illegal argument: {}", ex.getMessage());
+        log.error("IllegalArgumentException: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }

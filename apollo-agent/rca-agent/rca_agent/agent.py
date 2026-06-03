@@ -44,6 +44,21 @@ from .repo_resolver import RepoResolver
 
 logger = logging.getLogger(__name__)
 
+# Patterns that identify chaos / fault-injection test files.
+# These intentionally throw exceptions to simulate failures — they are never root causes.
+_CHAOS_PATTERNS = (
+    "chaoscontroller",
+    "chaosexception",
+    "/chaos/",
+    "chaos_controller",
+    "faultinject",
+    "fault_inject",
+)
+
+def _is_chaos_path(path: str) -> bool:
+    pl = path.lower()
+    return any(p in pl for p in _CHAOS_PATTERNS)
+
 
 # ── Internal sentinel exception ───────────────────────────────────────────────
 
@@ -80,6 +95,8 @@ RULES:
 - write_dependency_memory MUST be called BEFORE finish_rca (never after — the loop exits on finish_rca).
 - Confidence levels: "high" = direct evidence in diff/code; "medium" = strong inference from context; "low" = circumstantial.
 - Keep suggested_solutions practical, prioritised (1 = most urgent), and actionable.
+- CHAOS / FAULT-INJECTION FILES: ChaosController and ChaosException are intentional test-scaffolding that deliberately throw exceptions to simulate failures for chaos engineering. They are TRIGGERS — never root causes. If a stack trace contains a frame from ChaosController, skip it entirely and investigate the real business-logic class being exercised (e.g., AccountService, OrderService, PricingService). Your code_reference and root cause MUST point to actual business or infrastructure code, never to ChaosController or ChaosException.
+- LINE NUMBERS: File content is returned with explicit line numbers in the format "  N | <source line>". Always read these prefixed numbers — do not count lines yourself. When reporting code_reference.line, use the N from the prefix of the exact line you are citing.
 
 RCA REPORT SCHEMA (pass as JSON to finish_rca):
 {
@@ -866,6 +883,23 @@ class RCAAgent:
             path = inp["path"]
             org = inp.get("org", repo_info["org"])
             repo = inp.get("repo", repo_info["repo"])
+
+            # Chaos/fault-injection files are test scaffolding — never root causes.
+            # Return an advisory instead of the file so the agent cannot cite them.
+            if _is_chaos_path(path):
+                return {
+                    "path": path,
+                    "advisory": "chaos_file",
+                    "content": (
+                        f"⚠️  CHAOS / FAULT-INJECTION FILE — NOT the root cause.\n"
+                        f"'{path}' is intentional fault-injection code that deliberately "
+                        "throws exceptions to simulate production failures.\n"
+                        "STOP — do not analyse this file. Investigate the real business-logic "
+                        "class it was exercising when the exception was thrown "
+                        "(e.g., AccountService, OrderService, PricingService)."
+                    ),
+                }
+
             result = get_repo_file(
                 org, repo, path,
                 inp.get("ref", repo_info.get("commit_sha") or "main"),
@@ -875,11 +909,28 @@ class RCAAgent:
                 repo_key = f"{org}/{repo}"
                 if repo_key not in repos_investigated:
                     repos_investigated.append(repo_key)
-                # Truncate large files to keep context window manageable
-                content = result.get("content", "")
-                if len(content) > 4000:
-                    result = dict(result)
-                    result["content"] = content[:4000] + f"\n... [truncated, {len(content)} chars total]"
+
+                # Add explicit line numbers so the agent reads the N from the prefix
+                # instead of counting lines itself (which leads to off-by-N errors).
+                # Truncate by line count, not by character, to keep line numbers intact.
+                raw_lines = result["content"].split("\n")
+                total_lines = len(raw_lines)
+                MAX_LINES = 150
+                if total_lines > MAX_LINES:
+                    numbered = "\n".join(
+                        f"{i + 1:5d} | {line}" for i, line in enumerate(raw_lines[:MAX_LINES])
+                    )
+                    numbered += (
+                        f"\n      | ... [{total_lines - MAX_LINES} more lines not shown"
+                        " — use search_code_in_repo to find specific symbols]"
+                    )
+                else:
+                    numbered = "\n".join(
+                        f"{i + 1:5d} | {line}" for i, line in enumerate(raw_lines)
+                    )
+                result = dict(result)
+                result["content"] = numbered
+                result["total_lines"] = total_lines
             return result
 
         if name == "list_repo_files":
@@ -894,6 +945,14 @@ class RCAAgent:
                 repo_key = f"{org}/{repo}"
                 if repo_key not in repos_investigated:
                     repos_investigated.append(repo_key)
+                # Remove chaos/fault-injection files from the listing so the agent
+                # never fetches them during directory exploration.
+                files = result.get("files", [])
+                filtered = [f for f in files if not _is_chaos_path(f.get("path", ""))]
+                if len(filtered) < len(files):
+                    result = dict(result)
+                    result["files"] = filtered
+                    result["chaos_files_hidden"] = len(files) - len(filtered)
             return result
 
         if name == "search_code_in_repo":
@@ -1068,7 +1127,8 @@ class RCAAgent:
         return {"error": f"Unknown tool: {name}"}
 
     def _persist(self, report: RCAReport, error_log_id: str) -> None:
-        """Update error_logs row with completed RCA result."""
+        """Update error_logs and insert into rca_reports."""
+        report_json = json.dumps(report.model_dump(mode="json"))
         try:
             execute(
                 """UPDATE error_logs
@@ -1076,8 +1136,30 @@ class RCAAgent:
                        rca_completed_at = NOW(),
                        rca_result = %s
                    WHERE id = %s""",
-                (json.dumps(report.model_dump(mode="json")), error_log_id),
+                (report_json, error_log_id),
             )
+        except Exception as exc:
+            logger.warning("Could not update error_logs: %s", exc)
+
+        try:
+            execute(
+                """INSERT INTO rca_reports (rca_id, error_log_id, service_name, generated_at, report)
+                   VALUES (%s, %s, %s, %s, %s)
+                   ON DUPLICATE KEY UPDATE
+                       report = VALUES(report),
+                       generated_at = VALUES(generated_at)""",
+                (
+                    report.rca_id,
+                    error_log_id,
+                    report.service_name,
+                    report.generated_at,
+                    report_json,
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Could not insert into rca_reports: %s", exc)
+
+        try:
             append_rca_history(report.service_name, {
                 "rca_id": report.rca_id,
                 "generated_at": report.generated_at,
@@ -1087,4 +1169,4 @@ class RCAAgent:
                 "upstream_service": report.upstream_service,
             })
         except Exception as exc:
-            logger.warning("Could not persist RCA report: %s", exc)
+            logger.warning("Could not append rca_history: %s", exc)

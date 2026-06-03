@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { fetchLogs, fetchStats, triggerRCA } from '../api/client'
+import { fetchLogs, fetchStats } from '../api/client'
+import { clearStreamCache } from './RCAStreamPanel'
 import { useApp } from '../context/AppContext'
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -266,7 +267,7 @@ export default function RCADashboard() {
   const [loading,     setLoading]     = useState(true)
   const [filter,      setFilter]      = useState('all')
   const [search,      setSearch]      = useState('')
-  const [actionLoading, setActionLoading] = useState(null)
+  const [actionLoading] = useState(null)   // kept for ActionBtn disabled prop; no longer set
   const [lastRefresh, setLastRefresh] = useState(Date.now())
   const refreshRef    = useRef(null)
 
@@ -297,16 +298,13 @@ export default function RCADashboard() {
       return
     }
     if (action === 'run') {
-      setActionLoading(log.id)
-      try {
-        await triggerRCA(log.id)
-        openStream(log.id, log.service_name, log.error_type)
-        load()
-      } catch (e) {
-        // ignore
-      } finally {
-        setActionLoading(null)
-      }
+      // Clear any stale cache for this incident so the panel always starts fresh,
+      // whether this is a first run or a re-run of a completed/failed incident.
+      clearStreamCache(log.id)
+      // Open the SSE stream immediately — the stream endpoint starts the agent thread.
+      // Do NOT await a synchronous trigger call; that would block the UI for the full
+      // RCA duration (~2 min) before the panel opens.
+      openStream(log.id, log.service_name, log.error_type)
     }
   }, [openStream, load])
 

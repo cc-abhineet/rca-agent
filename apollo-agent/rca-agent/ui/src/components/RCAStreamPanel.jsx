@@ -5,8 +5,13 @@ import { useApp } from '../context/AppContext'
 const MAX_ITER = 20
 
 // ── Session-level cache — survives panel close/re-open ────────
-// Keyed by error_log_id. Never resets unless a NEW id is opened.
+// Keyed by error_log_id. Cleared explicitly on re-run via clearStreamCache().
 const _cache = {}
+
+/** Call before openStream() when re-running an already-seen incident. */
+export function clearStreamCache(id) {
+  if (id) delete _cache[id]
+}
 
 // ── Neural background canvas ──────────────────────────────────
 function NeuralBg({ active }) {

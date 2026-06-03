@@ -35,12 +35,12 @@ import os
 import sys
 from pathlib import Path
 
-# ── Load .env — check root first, then banking-app-master/rca-agent/.env ─────
+# ── Load .env from repo root (one level above apollo-agent/) ─────────────────
 from dotenv import load_dotenv
 
 _ENV_CANDIDATES = [
-    Path(__file__).parent / ".env",                              # root (preferred)
-    Path(__file__).parent / "banking-app-master" / "rca-agent" / ".env",  # legacy
+    Path(__file__).parent.parent / ".env",   # repo root .env (canonical)
+    Path(__file__).parent / ".env",          # local override
 ]
 for _env_path in _ENV_CANDIDATES:
     if _env_path.exists():
@@ -110,7 +110,7 @@ def upsert_service(
 
 # ── Load services from projects.yaml ─────────────────────────────────────────
 
-_PROJECTS_YAML = Path(__file__).parent / "banking-app-master" / "projects.yaml"
+_PROJECTS_YAML = Path(__file__).parent / "projects.yaml"
 
 
 def _load_from_projects_yaml() -> list[dict]:
@@ -191,7 +191,7 @@ def main() -> None:
             upsert_service(engine, **svc)
 
     print("\nDone. The rca-agent will now resolve these services to their GitHub repos.")
-    print("Next: seed error logs with  python banking-app-master/demo-repos/demo_seed_data.py")
+    print("Next: add real error logs or trigger the banking-app services to generate them.")
 
 
 if __name__ == "__main__":

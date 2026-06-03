@@ -18,7 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
@@ -273,6 +276,74 @@ public class AccountService {
                 .description(description)
                 .build();
         return transactionRepository.save(tx);
+    }
+
+    // ── Enrichment cache — populated by one-time migration job on 2025-04-01 ────────────────────────
+    // BUG v1.4.1 (commit 7f3a2c9, 2025-04-14, Priya Sharma):
+    // "perf: add enrichment cache to reduce downstream profile calls"
+    //
+    // The migration job only ran for accounts created before 2025-04-01.
+    // Any account created after that date is absent from the cache.
+    // ENRICHMENT_CACHE.get(accountNumber) returns null for those accounts,
+    // and the subsequent enrichmentData.get("category") call throws NullPointerException.
+    private static final Map<String, Map<String, String>> ENRICHMENT_CACHE;
+    static {
+        ENRICHMENT_CACHE = Collections.unmodifiableMap(new HashMap<>());
+        // Cache intentionally empty — simulates missing migration data for all current accounts.
+    }
+
+    /**
+     * Returns enrichment metadata (risk category, segment) for an account.
+     *
+     * BUG: all accounts created in the test environment post-date the migration cutoff,
+     * so ENRICHMENT_CACHE.get(accountNumber) always returns null here.
+     * The call to enrichmentData.get("category") throws NullPointerException.
+     *
+     * Stack trace (production):
+     *   java.lang.NullPointerException
+     *     at com.demo.banking.service.AccountService.getAccountEnrichment(AccountService.java)
+     *     at com.demo.banking.controller.AccountController.getEnrichment(AccountController.java)
+     */
+    public Map<String, Object> getAccountEnrichment(Long accountId) {
+        Account account = findAccountById(accountId);
+        log.info("Fetching enrichment metadata for accountId={} accountNumber={}", accountId, account.getAccountNumber());
+
+        // BUG: returns null for post-migration-cutoff accounts (all demo accounts)
+        Map<String, String> enrichmentData = ENRICHMENT_CACHE.get(account.getAccountNumber());
+
+        // NullPointerException — enrichmentData is null, .get() cannot be called
+        String category = enrichmentData.get("category");
+
+        log.info("Enrichment resolved: accountId={} category={}", accountId, category);
+        return Map.of("accountId", accountId, "category", category,
+                      "accountNumber", account.getAccountNumber());
+    }
+
+    /**
+     * Runs nightly batch reconciliation for the given batchId.
+     *
+     * BUG (commit 9d2c410, 2025-05-02, Marco Russo):
+     * "ops: add batch statement reconciliation endpoint"
+     *
+     * Opens a secondary JDBC connection pool for bulk reads. Under load the
+     * secondary pool exhausts after 30 000 ms without retry, throwing
+     * RuntimeException that propagates to the caller.
+     *
+     * Stack trace (production):
+     *   java.lang.RuntimeException: Unable to acquire JDBC Connection ...
+     *     at com.demo.banking.service.AccountService.processBatchStatement(AccountService.java)
+     */
+    public void processBatchStatement(String batchId) {
+        long count = accountRepository.count();
+        log.info("Starting batch reconciliation: batchId={} totalAccounts={}", batchId, count);
+
+        // BUG: secondary JDBC pool exhausted under load — not retried before propagating
+        throw new RuntimeException(
+                "Unable to acquire JDBC Connection from secondary pool; timeout after 30000ms. "
+                + "HikariPool-secondary — connection not available, request timed out after 30000ms. "
+                + "Verify rca-db.us-east-1.rds.amazonaws.com:5432 is accepting TCP/IP connections. "
+                + "[batchId=" + batchId + "]"
+        );
     }
 
     private String generateAccountNumber() {

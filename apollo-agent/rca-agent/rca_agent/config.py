@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # Search root → banking-app-master → local .env (for local dev outside Docker).
+        # Search repo root → apollo-agent → local .env (for local dev outside Docker).
         # In Docker, env vars are injected by docker-compose and take precedence.
         env_file=("../../.env", "../.env", ".env"),
         env_file_encoding="utf-8",

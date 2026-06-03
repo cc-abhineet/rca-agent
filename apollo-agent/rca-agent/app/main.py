@@ -68,11 +68,6 @@ def _job_finish(error_log_id: str) -> None:
             except Exception:
                 pass
 
-# Path to the seeded IDs file (written by demo_seed_data.py)
-_SEEDED_IDS_PATH = Path(__file__).parent.parent.parent / "demo-repos" / "seeded_ids.json"
-# Also check next to the script itself (for flexibility)
-_SEEDED_IDS_ALT = Path(__file__).parent.parent / "seeded_ids.json"
-
 # Apollo settings override file
 _APOLLO_SETTINGS_PATH = Path("/app/apollo_settings.json")
 

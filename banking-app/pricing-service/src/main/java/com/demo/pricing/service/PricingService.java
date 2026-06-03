@@ -55,6 +55,67 @@ public class PricingService {
             "vip",      0.20
     );
 
+    // ── Regional multiplier table — added v2.2.0 ────────────────────────────────
+    // BUG (commit f1a9b3e, 2025-05-20, Alice Chen): "feat: regional pricing multipliers"
+    // Map.of() does not support null keys. Calling REGION_MULTIPLIERS.get(null) throws NPE.
+    private static final Map<String, Double> REGION_MULTIPLIERS = Map.of(
+        "us-east-1", 1.00,
+        "eu-west-1", 1.12,
+        "ap-south-1", 0.95
+    );
+
+    /**
+     * Computes region-adjusted dynamic price for a SKU.
+     *
+     * BUG v2.2.0 (commit f1a9b3e, 2025-05-20, Alice Chen):
+     * When {@code sku} is {@code null} (mobile clients omitting the field),
+     * {@code BASE_PRICES.get(null)} throws NullPointerException because
+     * {@link Map#of} does not permit null keys.
+     *
+     * Stack trace (production):
+     *   java.lang.NullPointerException
+     *     at com.demo.pricing.service.PricingService.computeDynamicPricing(PricingService.java)
+     */
+    public double computeDynamicPricing(String sku, String region) {
+        log.info("Computing dynamic price: sku={} region={}", sku, region);
+        // BUG: Map.of() throws NullPointerException for null keys — sku=null crashes here
+        Double basePrice = BASE_PRICES.get(sku);
+        if (basePrice == null) {
+            throw new InvalidSkuException(sku);
+        }
+        Double multiplier = REGION_MULTIPLIERS.getOrDefault(region, 1.00);
+        double finalPrice = Math.round(basePrice * multiplier * 100.0) / 100.0;
+        log.info("Dynamic price: sku={} region={} multiplier={} finalPrice={}", sku, region, multiplier, finalPrice);
+        return finalPrice;
+    }
+
+    /**
+     * Computes bulk-discounted total for a SKU ordered in {@code volume} units.
+     *
+     * BUG v2.1.5 (commit 3b8c17d, 2025-04-28, Bob Martinez):
+     * "feat: volume discount tiers"
+     *
+     * Discount tier = {@code 10 / (volume - 1)}. When {@code volume == 1}
+     * this is integer division by zero — ArithmeticException in PricingService.
+     *
+     * Stack trace (production):
+     *   java.lang.ArithmeticException: / by zero
+     *     at com.demo.pricing.service.PricingService.computeDiscountedVolume(PricingService.java)
+     */
+    public double computeDiscountedVolume(String sku, int volume) {
+        log.info("Computing volume discount: sku={} volume={}", sku, volume);
+        Double basePrice = BASE_PRICES.get(sku);
+        if (basePrice == null) {
+            throw new InvalidSkuException(sku);
+        }
+        // BUG: ArithmeticException when volume == 1  (10 / (1-1) == 10 / 0)
+        int discountBps = 10 / (volume - 1);
+        double discountedUnit = basePrice * (1.0 - (discountBps * 0.001));
+        double total = Math.round(discountedUnit * volume * 100.0) / 100.0;
+        log.info("Volume discount: sku={} volume={} discountBps={} total={}", sku, volume, discountBps, total);
+        return total;
+    }
+
     // ── Business logic ───────────────────────────────────────────────────────
     public PricingDto.Response calculatePrice(PricingDto.Request req) {
         return pricingTimer.record(() -> {

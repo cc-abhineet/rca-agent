@@ -30,7 +30,10 @@
       "Bash(Start-Sleep -Seconds 3)",
       "Bash(Start-Sleep 3)",
       "Bash(xargs cat)",
-      "Bash(xargs grep -l \"confidence\\\\|92\\\\|65\\\\|38\")"
+      "Bash(xargs grep -l \"confidence\\\\|92\\\\|65\\\\|38\")",
+      "Bash(git mv *)",
+      "Bash(Remove-Item -Recurse -Force banking-app-master)",
+      "PowerShell(Remove-Item *)"
     ]
   }
 }

@@ -1,5 +1,8 @@
 package com.demo.pricing.controller;
 
+import com.demo.pricing.dto.PricingDto;
+import com.demo.pricing.service.PricingService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -9,41 +12,44 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ChaosController — intentional error injection for RCA demo testing.
+ * ChaosController — thin HTTP trigger layer for RCA scenario testing.
  *
- * Mirrors the pattern in banking-app ChaosController.
- * Each POST /chaos/{scenario} throws an exception that is logged by Logback
- * and shipped to Datadog via the agent sidecar.
+ * Each endpoint immediately delegates to PricingService so that exceptions
+ * and stack traces originate in the real business layer, NOT here.
+ *
+ * RULE: zero business logic in this class.
  */
 @RestController
 @RequestMapping("/chaos")
+@RequiredArgsConstructor
 @Slf4j
 public class ChaosController {
+
+    private final PricingService pricingService;
 
     private static final List<Map<String, String>> SCENARIOS = List.of(
         Map.of(
             "id",          "null-pointer",
-            "name",        "NullPointerException in PricingService",
-            "description", "Simulates a null dereference when catalogue lookup returns null unexpectedly",
+            "name",        "NullPointerException in PricingService.computeDynamicPricing",
+            "description", "Calls computeDynamicPricing(null, 'us-east-1') — Map.of() rejects null key → NPE inside PricingService",
             "severity",    "ERROR"
         ),
         Map.of(
             "id",          "invalid-sku",
-            "name",        "InvalidSkuException",
-            "description", "Triggers an InvalidSkuException for a non-existent SKU",
+            "name",        "InvalidSkuException in PricingService.calculatePrice",
+            "description", "Calls calculatePrice with SKU-CHAOS-999 → InvalidSkuException inside PricingService",
             "severity",    "WARN"
         ),
         Map.of(
             "id",          "arithmetic",
-            "name",        "ArithmeticException (divide by zero)",
-            "description", "Simulates a divide-by-zero in the discount calculation path",
+            "name",        "ArithmeticException in PricingService.computeDiscountedVolume",
+            "description", "Calls computeDiscountedVolume('SKU-001', 1) — 10/(1-1) = divide-by-zero → ArithmeticException inside PricingService",
             "severity",    "ERROR"
         )
     );
 
     @GetMapping("/scenarios")
     public ResponseEntity<Map<String, Object>> listScenarios() {
-        log.info("GET /chaos/scenarios");
         return ResponseEntity.ok(Map.of(
             "scenarios", SCENARIOS,
             "count",     SCENARIOS.size(),
@@ -51,30 +57,41 @@ public class ChaosController {
         ));
     }
 
-    @PostMapping("/{scenario}")
-    public ResponseEntity<Void> triggerChaos(@PathVariable String scenario) {
-        log.info("CHAOS TRIGGER: scenario={} at {}", scenario, LocalDateTime.now());
-        return switch (scenario) {
-            case "null-pointer" -> {
-                String sku = null;
-                // deliberate null dereference — GlobalExceptionHandler logs the full NPE stack trace
-                int len = sku.length();
-                yield ResponseEntity.<Void>ok().build();
-            }
-            case "invalid-sku" -> {
-                log.info("Simulating invalid SKU lookup for sku=SKU-CHAOS");
-                throw new com.demo.pricing.exception.InvalidSkuException("SKU-CHAOS");
-            }
-            case "arithmetic" -> {
-                int zero = 0;
-                int result = 100 / zero;  // ArithmeticException — GlobalExceptionHandler logs it
-                yield ResponseEntity.<Void>ok().build();
-            }
-            default -> {
-                log.error("Unknown chaos scenario: {}", scenario);
-                throw new IllegalArgumentException("Unknown chaos scenario: " + scenario +
-                    ". Call GET /chaos/scenarios for available scenarios.");
-            }
-        };
+    /**
+     * Delegates to PricingService.computeDynamicPricing — NullPointerException
+     * originates there when sku=null is passed to Map.of().get().
+     */
+    @PostMapping("/null-pointer")
+    public ResponseEntity<Void> triggerNullPointer() {
+        log.info("CHAOS: triggering null-pointer via PricingService.computeDynamicPricing(null, 'us-east-1')");
+        pricingService.computeDynamicPricing(null, "us-east-1");
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Delegates to PricingService.calculatePrice — InvalidSkuException
+     * originates there when the SKU is not found in the catalogue.
+     */
+    @PostMapping("/invalid-sku")
+    public ResponseEntity<Void> triggerInvalidSku() {
+        log.info("CHAOS: triggering invalid-sku via PricingService.calculatePrice(SKU-CHAOS-999)");
+        PricingDto.Request req = PricingDto.Request.builder()
+                .sku("SKU-CHAOS-999")
+                .quantity(1)
+                .customerTier("standard")
+                .build();
+        pricingService.calculatePrice(req);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Delegates to PricingService.computeDiscountedVolume — ArithmeticException
+     * originates there when volume=1 causes division by zero.
+     */
+    @PostMapping("/arithmetic")
+    public ResponseEntity<Void> triggerArithmetic() {
+        log.info("CHAOS: triggering arithmetic-error via PricingService.computeDiscountedVolume('SKU-001', 1)");
+        pricingService.computeDiscountedVolume("SKU-001", 1);
+        return ResponseEntity.ok().build();
     }
 }

@@ -44,8 +44,8 @@ projects:
     default_branch: main
     language: java
     environment: dev
-    observability_mode: datadog     # switch to db + add log_path to watch locally
-    log_path: /var/log/pricing-service/app.log
+    observability_mode: db
+    log_path: /var/log/banking-app/app.log
 
     datadog:
       service_name: pricing-service
@@ -63,8 +63,8 @@ projects:
     default_branch: main
     language: java
     environment: dev
-    observability_mode: datadog     # switch to db + add log_path to watch locally
-    log_path: /var/log/order-service/app.log
+    observability_mode: db
+    log_path: /var/log/banking-app/app.log
 
     datadog:
       service_name: order-service
