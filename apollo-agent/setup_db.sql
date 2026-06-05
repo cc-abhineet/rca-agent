@@ -35,7 +35,11 @@ CREATE TABLE IF NOT EXISTS error_logs (
     rca_started_at   DATETIME,
     rca_completed_at DATETIME,
     rca_result       JSON,
-    rca_error        TEXT
+    rca_error        TEXT,
+    fingerprint      CHAR(64),                 -- sha256 of service+error_type+top3 frames
+    duplicate_of     CHAR(36),                 -- original error_logs.id when this is a duplicate
+    occurrence_count INT NOT NULL DEFAULT 1,   -- bumped on the original each time a duplicate arrives
+    last_seen_at     DATETIME                  -- last time a matching duplicate was seen
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- service_repo_map: maps service name → GitHub org/repo
@@ -80,6 +84,7 @@ CREATE TABLE IF NOT EXISTS rca_reports (
 CREATE INDEX IF NOT EXISTS idx_error_logs_service  ON error_logs(service_name);
 CREATE INDEX IF NOT EXISTS idx_error_logs_occurred ON error_logs(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_error_logs_status   ON error_logs(rca_status);
+CREATE INDEX IF NOT EXISTS idx_error_logs_fp        ON error_logs(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_cache_service       ON service_context_cache(service_name);
 
 -- ── Verify ──────────────────────────────────────────────────────

@@ -67,6 +67,7 @@ function CodeBlock({ content }) {
 
 function LogCard({ log, isDatadog, onRunRCA }) {
   const [expanded, setExpanded] = useState(false)
+  const isDuplicate = !!log.duplicate_of || log.rca_status === 'duplicate'
   const borderCls = riskClass(log.risk_level || log.level)
   const text = log.gemini_analysis || log.message || log.error_message || ''
   const suggestions = (log.gemini_suggestions || '').split(';').map(s => s.trim()).filter(Boolean)
@@ -96,6 +97,11 @@ function LogCard({ log, isDatadog, onRunRCA }) {
           {log.gemini_category && (
             <span className="badge badge-indigo">{log.gemini_category}</span>
           )}
+          {isDuplicate && (
+            <span className="badge badge-purple" title={`Duplicate of incident ${(log.duplicate_of || '').slice(0, 8)}`}>
+              ⧉ Duplicate
+            </span>
+          )}
           {log.rca_status && (
             <span className={`status-badge status-${log.rca_status}`}>
               <span className="dot" />
@@ -103,7 +109,7 @@ function LogCard({ log, isDatadog, onRunRCA }) {
             </span>
           )}
           <div className="log-card-actions">
-            {!isDatadog && (
+            {!isDatadog && !isDuplicate && (
               <button
                 className="btn btn-primary"
                 style={{ fontSize: 12, padding: '4px 10px' }}
@@ -111,6 +117,17 @@ function LogCard({ log, isDatadog, onRunRCA }) {
               >
                 Run RCA →
               </button>
+            )}
+            {isDuplicate && (
+              <a
+                className="btn btn-secondary"
+                style={{ fontSize: 12, padding: '4px 10px' }}
+                href={`/rca/${log.id}/report`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View Report
+              </a>
             )}
             <button
               className="btn btn-secondary"

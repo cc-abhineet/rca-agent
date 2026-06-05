@@ -4,19 +4,35 @@ Wires parse → analyze → store into a compiled StateGraph.
 """
 from langgraph.graph import StateGraph, END
 
-from agents.log_monitor.nodes import IncidentState, parse_node, analyze_node, store_node
+from agents.log_monitor.nodes import (
+    IncidentState,
+    parse_node,
+    dedup_node,
+    analyze_node,
+    store_node,
+)
 
 
 def build_graph():
-    """Build and compile the incident processing graph."""
+    """Build and compile the incident processing graph.
+
+    Flow: parse → dedup → (analyze → store | store).
+    Duplicates skip the expensive Gemini analyze step and go straight to store.
+    """
     graph = StateGraph(IncidentState)
 
     graph.add_node("parse",   parse_node)
+    graph.add_node("dedup",   dedup_node)
     graph.add_node("analyze", analyze_node)
     graph.add_node("store",   store_node)
 
     graph.set_entry_point("parse")
-    graph.add_edge("parse",   "analyze")
+    graph.add_edge("parse", "dedup")
+    graph.add_conditional_edges(
+        "dedup",
+        lambda s: "duplicate" if s.get("is_duplicate") else "new",
+        {"duplicate": "store", "new": "analyze"},
+    )
     graph.add_edge("analyze", "store")
     graph.add_edge("store",   END)
 
@@ -58,6 +74,9 @@ async def process_log_entry(
         "severity":           "ERROR",
         "stack_trace":        None,
         "timestamp":          None,
+        "fingerprint":        None,
+        "is_duplicate":       False,
+        "duplicate_of":       None,
         "gemini_summary":     None,
         "gemini_category":    None,
         "gemini_analysis":    None,

@@ -12,8 +12,14 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
 from config.settings import settings
-from db.database import insert_incident, log_token_usage_sync
+from db.database import (
+    insert_incident,
+    log_token_usage_sync,
+    find_original_by_fingerprint,
+    bump_occurrence,
+)
 from utils.log_parser import parse_log_entry, ParsedLogEntry
+from utils.fingerprint import compute_fingerprint
 from utils.severity_rules import get_known_severity, format_rules_for_prompt
 
 _GEMINI_MODEL = "gemini-2.5-flash"
@@ -41,6 +47,11 @@ class IncidentState(TypedDict):
     severity: str
     stack_trace: Optional[str]
     timestamp: Optional[datetime]
+    fingerprint: Optional[str]
+
+    # After dedup node
+    is_duplicate: bool
+    duplicate_of: Optional[str]      # original incident_id when this is a duplicate
 
     # After analyze node
     gemini_summary: Optional[str]
@@ -90,6 +101,8 @@ def parse_node(state: IncidentState) -> IncidentState:
     raw_log = state["raw_log"]
     logger.info("parse_node: processing %d chars of raw log", len(raw_log))
 
+    svc = state.get("service_name") or settings.service_name
+
     try:
         parsed = parse_log_entry(raw_log)
         error_type = _infer_error_type(raw_log, parsed.error_type)
@@ -103,6 +116,7 @@ def parse_node(state: IncidentState) -> IncidentState:
             "severity":    parsed.severity or "ERROR",
             "stack_trace": parsed.stack_trace,
             "timestamp":   parsed.timestamp,
+            "fingerprint": compute_fingerprint(svc, error_type, parsed.stack_trace),
             "error":       None,
         }
     except Exception as exc:
@@ -116,8 +130,54 @@ def parse_node(state: IncidentState) -> IncidentState:
             "severity":    "ERROR",
             "stack_trace": None,
             "timestamp":   None,
+            "fingerprint": compute_fingerprint(svc, error_type, None),
             "error":       str(exc),
         }
+
+
+# ── Node: dedup ─────────────────────────────────────────────────────────────
+
+async def dedup_node(state: IncidentState) -> IncidentState:
+    """
+    Fast, zero-cost duplicate check using the fingerprint computed in parse_node.
+
+    If an original incident with the same fingerprint already exists, this entry
+    is a duplicate: we copy the original's Gemini fields (so the dashboard card
+    still shows category/risk without another Gemini call), link it via
+    duplicate_of, and bump the original's occurrence counter. The graph then
+    routes duplicates straight to store_node, skipping the expensive analyze step.
+    """
+    fingerprint = state.get("fingerprint")
+    try:
+        original = await find_original_by_fingerprint(fingerprint) if fingerprint else None
+    except Exception:
+        logger.exception("dedup_node: fingerprint lookup failed — treating as new")
+        original = None
+
+    if not original:
+        return {**state, "is_duplicate": False, "duplicate_of": None}
+
+    original_id = original["id"]
+    logger.info(
+        "dedup_node: duplicate of %s (fingerprint=%s…) — skipping analysis",
+        original_id[:8], (fingerprint or "")[:8],
+    )
+    try:
+        await bump_occurrence(original_id)
+    except Exception:
+        logger.warning("dedup_node: occurrence bump failed (non-critical)")
+
+    return {
+        **state,
+        "is_duplicate":       True,
+        "duplicate_of":       original_id,
+        # Reuse the original's analysis so the card renders fully, no Gemini cost.
+        "gemini_category":    original.get("gemini_category"),
+        "gemini_analysis":    original.get("gemini_analysis"),
+        "gemini_suggestions": original.get("gemini_suggestions"),
+        "risk_level":         original.get("risk_level"),
+        "gemini_summary":     state.get("message", ""),
+    }
 
 
 # ── Node: analyze ───────────────────────────────────────────────────────────
@@ -270,6 +330,8 @@ async def store_node(state: IncidentState) -> IncidentState:
     svc = state.get("service_name") or settings.service_name
     env = state.get("environment") or settings.environment
 
+    is_duplicate = state.get("is_duplicate", False)
+
     try:
         incident_id = await insert_incident(
             service_name=svc,
@@ -285,6 +347,9 @@ async def store_node(state: IncidentState) -> IncidentState:
             gemini_analysis=state.get("gemini_analysis"),
             gemini_suggestions=state.get("gemini_suggestions"),
             risk_level=state.get("risk_level"),
+            fingerprint=state.get("fingerprint"),
+            duplicate_of=state.get("duplicate_of"),
+            rca_status="duplicate" if is_duplicate else "pending",
         )
         logger.info("store_node: incident %s stored successfully", incident_id)
         return {

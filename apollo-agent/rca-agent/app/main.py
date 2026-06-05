@@ -19,7 +19,7 @@ from rca_agent.db import execute, execute_one, json_loads, get_conn, create_toke
 from rca_agent.adapters.observability.local_db import LocalDBAdapter
 from rca_agent.adapters.cicd.mock_adapter import MockCICDAdapter
 from rca_agent.agent import RCAAgent
-from rca_agent.report_renderer import render_rca_html
+from rca_agent.report_renderer import render_rca_html, render_duplicate_banner
 from rca_agent.token_pricing import display_name as model_display_name
 from rca_agent.overlay import invalidate as invalidate_overlay_cache
 
@@ -255,13 +255,44 @@ def run_rca_stream(req: StreamRCARequest):
 
 @app.get("/rca/{error_log_id}/report", response_class=HTMLResponse)
 def get_rca_report(error_log_id: str):
-    """Return a human-readable HTML RCA report."""
+    """Return a human-readable HTML RCA report.
+
+    Duplicate occurrences carry no RCA of their own — they resolve to the
+    original incident's report, rendered with a banner flagging the duplication.
+    """
     row = execute_one(
-        "SELECT rca_result, rca_status FROM error_logs WHERE id = %s",
+        "SELECT rca_result, rca_status, duplicate_of, occurred_at FROM error_logs WHERE id = %s",
         (error_log_id,)
     )
     if not row:
         raise HTTPException(status_code=404, detail="Error log not found")
+
+    duplicate_banner = None
+    if row.get("duplicate_of"):
+        original_id = str(row["duplicate_of"])
+        original = execute_one(
+            "SELECT rca_result, rca_status, occurred_at FROM error_logs WHERE id = %s",
+            (original_id,),
+        )
+        if not original:
+            # Original was deleted — fall back to this row's own (absent) report.
+            return HTMLResponse(
+                content="<html><body><h2>Duplicate</h2>"
+                        "<p>The original incident this duplicates no longer exists.</p></body></html>",
+                status_code=202,
+            )
+        first_seen = str(original["occurred_at"])[:19] if original.get("occurred_at") else ""
+        duplicate_banner = render_duplicate_banner(original_id, first_seen)
+        if original["rca_status"] != "completed" or not original["rca_result"]:
+            return HTMLResponse(
+                content=f"<html><body><h2>Duplicate — original RCA {original['rca_status']}</h2>"
+                        f"<p>This is a duplicate of incident {original_id[:8]}. "
+                        f"Its root-cause analysis is not available yet.</p></body></html>",
+                status_code=202,
+            )
+        report_dict = json_loads(original["rca_result"])
+        return HTMLResponse(content=render_rca_html(report_dict, duplicate_banner=duplicate_banner))
+
     if row["rca_status"] != "completed" or not row["rca_result"]:
         return HTMLResponse(
             content=f"<html><body><h2>RCA {row['rca_status']}</h2><p>No report available yet.</p></body></html>",
@@ -389,7 +420,8 @@ def api_logs(
         f"""SELECT id, service_name, environment, error_type, error_message,
                    stack_trace, severity, occurred_at, metadata, rca_status,
                    rca_started_at, rca_completed_at, rca_result, rca_error,
-                   gemini_category, gemini_analysis, gemini_suggestions, risk_level
+                   gemini_category, gemini_analysis, gemini_suggestions, risk_level,
+                   duplicate_of, occurrence_count
             FROM error_logs {where}
             ORDER BY occurred_at DESC
             LIMIT %s OFFSET %s""",
@@ -417,6 +449,8 @@ def api_logs(
             "gemini_analysis": row.get("gemini_analysis") or "",
             "gemini_suggestions": row.get("gemini_suggestions") or "",
             "risk_level": row.get("risk_level") or "",
+            "duplicate_of": str(row["duplicate_of"]) if row.get("duplicate_of") else None,
+            "occurrence_count": int(row.get("occurrence_count") or 1),
         })
 
     return {
@@ -435,7 +469,8 @@ def api_log_detail(log_id: str):
         """SELECT id, service_name, environment, error_type, error_message,
                   stack_trace, severity, occurred_at, metadata, rca_status,
                   rca_started_at, rca_completed_at, rca_result, rca_error,
-                  gemini_category, gemini_analysis, gemini_suggestions, risk_level
+                  gemini_category, gemini_analysis, gemini_suggestions, risk_level,
+                  duplicate_of, occurrence_count
            FROM error_logs WHERE id = %s""",
         (log_id,),
     )
@@ -460,6 +495,8 @@ def api_log_detail(log_id: str):
         "gemini_analysis": row.get("gemini_analysis") or "",
         "gemini_suggestions": row.get("gemini_suggestions") or "",
         "risk_level": row.get("risk_level") or "",
+        "duplicate_of": str(row["duplicate_of"]) if row.get("duplicate_of") else None,
+        "occurrence_count": int(row.get("occurrence_count") or 1),
     }
 
 

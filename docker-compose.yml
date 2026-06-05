@@ -101,7 +101,7 @@ services:
       dockerfile: error-ingestion-agent/Dockerfile
     env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://root:varun@host.docker.internal:3306/rca_db
+      DATABASE_URL: mysql+pymysql://rca:rca_pass@host.docker.internal:3306/rca_db
       MODE: "db"
       LOG_FILE_PATHS: "/var/log/banking-app/app.log"
       SERVICE_NAME: "banking-app"
@@ -127,7 +127,7 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://root:varun@host.docker.internal:3306/rca_db
+      DATABASE_URL: mysql+pymysql://rca:rca_pass@host.docker.internal:3306/rca_db
       OBSERVABILITY_ADAPTER: "local"
       CICD_ADAPTER: "mock"
       GITHUB_ORG: "apollo"

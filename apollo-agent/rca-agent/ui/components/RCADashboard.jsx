@@ -24,9 +24,10 @@ function StatusBadge({ status }) {
 }
 
 function RCAIncidentRow({ log, onStream }) {
+  const isDuplicate = !!log.duplicate_of || log.rca_status === 'duplicate'
   const borderCls = log.rca_status || 'pending'
-  const canRun    = log.rca_status === 'pending' || log.rca_status === 'failed'
-  const canStream = log.rca_status === 'in_progress'
+  const canRun    = !isDuplicate && (log.rca_status === 'pending' || log.rca_status === 'failed')
+  const canStream = !isDuplicate && log.rca_status === 'in_progress'
   const isDone    = log.rca_status === 'completed'
 
   return (
@@ -58,6 +59,16 @@ function RCAIncidentRow({ log, onStream }) {
           {log.gemini_category && (
             <span className="badge badge-indigo">{log.gemini_category}</span>
           )}
+          {isDuplicate && (
+            <span className="badge badge-purple" title={`Duplicate of incident ${(log.duplicate_of || '').slice(0, 8)}`}>
+              ⧉ Duplicate
+            </span>
+          )}
+          {!isDuplicate && log.occurrence_count > 1 && (
+            <span className="badge badge-gray" title="Times this error has recurred">
+              ×{log.occurrence_count}
+            </span>
+          )}
           <StatusBadge status={log.rca_status} />
         </div>
 
@@ -80,7 +91,7 @@ function RCAIncidentRow({ log, onStream }) {
               ⚡ Stream
             </button>
           )}
-          {isDone && (
+          {(isDone || isDuplicate) && (
             <a
               href={`/rca/${log.id}/report`}
               target="_blank"

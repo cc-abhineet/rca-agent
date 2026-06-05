@@ -202,6 +202,43 @@ async def save_cursor(service_name: str, cursor: str) -> None:
     logger.debug("Cursor saved for %s", service_name)
 
 
+async def find_original_by_fingerprint(fingerprint: str) -> Optional[dict]:
+    """
+    Return the *original* error_logs row for a fingerprint, or None if unseen.
+
+    The original is the earliest row carrying this fingerprint that is not itself
+    a duplicate (duplicate_of IS NULL). Its Gemini fields are returned so a new
+    duplicate occurrence can reuse them without paying for another Gemini call.
+    """
+    if not fingerprint:
+        return None
+    async with get_connection() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """SELECT id, gemini_category, gemini_analysis,
+                          gemini_suggestions, risk_level
+                   FROM error_logs
+                   WHERE fingerprint = %s AND duplicate_of IS NULL
+                   ORDER BY occurred_at ASC
+                   LIMIT 1""",
+                (fingerprint,),
+            )
+            return await cur.fetchone()
+
+
+async def bump_occurrence(row_id: str) -> None:
+    """Increment occurrence_count and refresh last_seen_at on the original row."""
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """UPDATE error_logs
+                   SET occurrence_count = occurrence_count + 1, last_seen_at = NOW()
+                   WHERE id = %s""",
+                (row_id,),
+            )
+        await conn.commit()
+
+
 async def insert_incident(
     service_name: str,
     environment: str,
@@ -216,10 +253,17 @@ async def insert_incident(
     gemini_analysis: Optional[str] = None,
     gemini_suggestions: Optional[str] = None,
     risk_level: Optional[str] = None,
+    fingerprint: Optional[str] = None,
+    duplicate_of: Optional[str] = None,
+    rca_status: str = "pending",
 ) -> str:
     """
     Insert a new error into error_logs (the unified table read by the RCA agent).
     Returns the new row's UUID string.
+
+    When ``duplicate_of`` is set, the row is a duplicate occurrence linked to an
+    original incident; pass rca_status='duplicate' so the RCA pipeline skips it
+    and the UI points its report at the original.
     """
     row_id = str(uuid.uuid4())
 
@@ -238,8 +282,9 @@ async def insert_incident(
                 INSERT INTO error_logs
                     (id, service_name, environment, error_type, error_message,
                      stack_trace, severity, occurred_at, metadata, rca_status,
-                     gemini_category, gemini_analysis, gemini_suggestions, risk_level)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s, %s, %s)
+                     gemini_category, gemini_analysis, gemini_suggestions, risk_level,
+                     fingerprint, duplicate_of)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     row_id,
@@ -251,16 +296,20 @@ async def insert_incident(
                     severity,
                     occurred_at or datetime.utcnow(),
                     json.dumps(metadata),
+                    rca_status,
                     gemini_category,
                     gemini_analysis,
                     gemini_suggestions,
                     risk_level,
+                    fingerprint,
+                    duplicate_of,
                 ),
             )
         await conn.commit()
 
     logger.info(
-        "Incident #%s inserted — service=%s risk_level=%s source=%s",
+        "Incident #%s inserted — service=%s risk_level=%s source=%s%s",
         row_id[:8], service_name, risk_level or "?", source,
+        f" duplicate_of={duplicate_of[:8]}" if duplicate_of else "",
     )
     return row_id

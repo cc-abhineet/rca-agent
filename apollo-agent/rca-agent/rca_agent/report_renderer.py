@@ -107,6 +107,25 @@ def _diff_block(diff_text: str) -> str:
     )
 
 
+def render_duplicate_banner(original_id: str, first_seen: str = "") -> str:
+    """
+    Build a banner flagging that the viewed incident is a duplicate of an earlier
+    one, linking to the original's report. Shown at the top of the report body.
+    """
+    seen = f" · first seen {_esc(_fmt_ts(first_seen))}" if first_seen else ""
+    link = f"/rca/{_esc(original_id)}/report"
+    return f"""
+<div style="display:flex;align-items:center;gap:12px;background:rgba(168,85,247,.12);
+            border:1px solid rgba(168,85,247,.4);border-radius:12px;
+            padding:14px 18px;margin-bottom:24px;color:#e9d5ff;font-size:.9rem;">
+  {_badge("Duplicate", "#a855f7", "#fff")}
+  <span>This error is identical to an earlier incident
+    <a href="{link}" style="color:#d8b4fe;font-weight:700;text-decoration:underline;">
+      {_esc(original_id[:8])}</a>{seen}.
+    Showing that incident's root-cause analysis.</span>
+</div>"""
+
+
 def _fmt_ts(ts: str) -> str:
     """Format an ISO timestamp to a human-readable string."""
     try:
@@ -534,14 +553,18 @@ a { color: #60a5fa; }
 """
 
 
-def render_rca_html(report_dict: dict) -> str:
+def render_rca_html(report_dict: dict, duplicate_banner: str | None = None) -> str:
     """
     Render an RCA report dictionary into a self-contained HTML string.
     All CSS is inline — no external dependencies required.
+
+    When ``duplicate_banner`` is provided (HTML from render_duplicate_banner),
+    it is shown at the top of the report body to flag a duplicate occurrence.
     """
     sections = [
         _render_header(report_dict),
         '<div style="max-width:900px;margin:0 auto;padding:28px 24px;">',
+        duplicate_banner or "",
         _render_incident_summary(report_dict),
         _render_timeline(report_dict),
         _render_root_cause(report_dict),
