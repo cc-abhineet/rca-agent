@@ -78,6 +78,7 @@ function SourceTag({ metadata }) {
 function LogCard({ log, onRunRCA, onCancel }) {
   const [expanded, setExpanded] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const isDuplicate = !!log.duplicate_of || log.rca_status === 'duplicate'
   const borderCls = riskClass(log.risk_level)
   const bodyText  = log.gemini_analysis || log.error_message || ''
   const suggestions = (log.gemini_suggestions || '').split(';').map(s => s.trim()).filter(Boolean)
@@ -108,6 +109,11 @@ function LogCard({ log, onRunRCA, onCancel }) {
           {log.gemini_category && (
             <span className="badge badge-indigo">{log.gemini_category}</span>
           )}
+          {isDuplicate && (
+            <span className="badge badge-purple" title={`Duplicate of incident ${(log.duplicate_of || '').slice(0, 8)}`}>
+              ⧉ Duplicate
+            </span>
+          )}
           {log.rca_status && (
             <span className={`status-badge status-${log.rca_status}`}>
               <span className="dot" />
@@ -115,13 +121,22 @@ function LogCard({ log, onRunRCA, onCancel }) {
             </span>
           )}
           <div className="log-card-actions">
-            {log.rca_status === 'pending' && (
+            {!isDuplicate && log.rca_status === 'pending' && (
               <button
                 className="btn btn-primary"
                 style={{ fontSize: 12, padding: '4px 10px' }}
                 onClick={() => onRunRCA(log.id, log.service_name, log.error_type)}
               >
                 Run RCA →
+              </button>
+            )}
+            {isDuplicate && (
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => window.open(`/rca/${log.id}/report`, '_blank')}
+              >
+                View Report
               </button>
             )}
             {log.rca_status === 'in_progress' && (

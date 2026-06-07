@@ -332,6 +332,8 @@ ul { list-style: none; }
 .status-completed  .dot { background: var(--success); }
 .status-failed     { background: var(--error-dim); color: var(--error); }
 .status-failed     .dot { background: var(--error); }
+.status-duplicate  { background: var(--purple-dim); color: var(--purple); }
+.status-duplicate  .dot { background: var(--purple); }
 
 /* ── Form elements ───────────────────────────────────────────── */
 .form-group {

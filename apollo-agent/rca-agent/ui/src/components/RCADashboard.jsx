@@ -38,6 +38,7 @@ const STATUS_LEFT_COLOR = {
   in_progress: '#06B6D4',
   completed:   '#10B981',
   failed:      '#EF4444',
+  duplicate:   '#A855F7',
 }
 
 // ── Stat cards ────────────────────────────────────────────────
@@ -99,8 +100,9 @@ function IncidentCard({ log, onAction, loading }) {
                   : conf === 'medium' ? { color: '#FBBF24', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)' }
                   : conf ? { color: '#F87171', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.25)' } : null
 
-  const canRun    = status === 'pending' || status === 'failed'
-  const canStream = status === 'in_progress'
+  const isDuplicate = !!log.duplicate_of || status === 'duplicate'
+  const canRun    = !isDuplicate && (status === 'pending' || status === 'failed')
+  const canStream = !isDuplicate && status === 'in_progress'
   const isDone    = status === 'completed'
 
   return (
@@ -162,6 +164,22 @@ function IncidentCard({ log, onAction, loading }) {
               {conf} conf
             </span>
           )}
+          {/* Duplicate flag */}
+          {isDuplicate && (
+            <span
+              title={`Duplicate of incident ${(log.duplicate_of || '').slice(0, 8)}`}
+              style={{ padding: '2px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.35)', color: '#C4B5FD', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              ⧉ Duplicate
+            </span>
+          )}
+          {/* Recurrence count on the original */}
+          {!isDuplicate && log.occurrence_count > 1 && (
+            <span
+              title="Times this error has recurred"
+              style={{ padding: '2px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#94A3B8', letterSpacing: '0.05em' }}>
+              ×{log.occurrence_count}
+            </span>
+          )}
           {/* Status */}
           <StatusPill status={status} />
           {/* Time */}
@@ -203,6 +221,14 @@ function IncidentCard({ log, onAction, loading }) {
               onClick={() => onAction('run', log)}
             />
           )}
+          {isDuplicate && (
+            <ActionBtn
+              label="📊 Report"
+              color="#C4B5FD" dimColor="rgba(168,85,247,0.1)" borderColor="rgba(168,85,247,0.3)"
+              hoverColor="rgba(168,85,247,0.22)"
+              onClick={() => onAction('report', log)}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -215,6 +241,7 @@ function StatusPill({ status }) {
     in_progress: { label: 'Running',     color: '#22D3EE', bg: 'rgba(6,182,212,0.1)',   border: 'rgba(6,182,212,0.3)',    dot: true, pulse: true },
     completed:   { label: 'Completed',   color: '#34D399', bg: 'rgba(16,185,129,0.1)',  border: 'rgba(16,185,129,0.25)',  dot: false },
     failed:      { label: 'Failed',      color: '#F87171', bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.25)',   dot: false },
+    duplicate:   { label: 'Duplicate',   color: '#C4B5FD', bg: 'rgba(168,85,247,0.1)',  border: 'rgba(168,85,247,0.25)',  dot: false },
   }
   const s = map[status] || map.pending
   return (
@@ -224,6 +251,7 @@ function StatusPill({ status }) {
       )}
       {!s.dot && status === 'completed' && '✓ '}
       {!s.dot && status === 'failed'    && '✕ '}
+      {!s.dot && status === 'duplicate' && '⧉ '}
       {s.label}
     </span>
   )
