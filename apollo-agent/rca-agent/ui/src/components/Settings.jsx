@@ -17,7 +17,7 @@ const DD_SITES = [
 
 const SECTIONS = [
   { id: 'claude',        label: 'Claude AI',     icon: '⚡' },
-  { id: 'github',        label: 'GitHub',        icon: '⎇'  },
+  { id: 'github',        label: 'GitLab',        icon: '⎇'  },
   { id: 'datadog',       label: 'Datadog',       icon: '📊' },
   { id: 'observability', label: 'Observability', icon: '👁'  },
   { id: 'database',      label: 'Database',      icon: '🗄'  },
@@ -165,8 +165,10 @@ export default function Settings() {
 
   const [form, setForm] = useState({
     anthropic_api_key:    '',
+    gemini_api_key:       '',
     github_pat:           '',
     github_org:           '',
+    gitlab_url:           '',
     model:                'claude-haiku-4-5-20251001',
     max_react_iterations: 8,
     dd_api_key:           '',
@@ -187,6 +189,7 @@ export default function Settings() {
         setForm(prev => ({
           ...prev,
           github_org:            s.github_org            ?? prev.github_org,
+          gitlab_url:            s.gitlab_url            ?? prev.gitlab_url,
           model:                 s.model                 ?? prev.model,
           max_react_iterations:  s.max_react_iterations  ?? prev.max_react_iterations,
           dd_site:               s.dd_site               ?? prev.dd_site,
@@ -227,7 +230,9 @@ export default function Settings() {
     setForm(prev => ({
       ...prev,
       anthropic_api_key: '',
+      gemini_api_key:    '',
       github_pat:        '',
+      gitlab_url:        '',
       dd_api_key:        '',
       dd_app_key:        '',
     }))
@@ -291,6 +296,19 @@ export default function Settings() {
                 />
               </div>
 
+              <div className="settings-field-full">
+                <MaskedInput
+                  label="Gemini API Key"
+                  name="gemini_api_key"
+                  value={form.gemini_api_key}
+                  onChange={handleChange}
+                  badge={<RestartBadge />}
+                  help={displayed.gemini_api_key
+                    ? `Current: ${displayed.gemini_api_key}`
+                    : 'Used by error ingestion agent for AI classification — restart ingestion agent to apply'}
+                />
+              </div>
+
               <FormField label="Model" badge={<LiveBadge />} help="Used on every RCA run — switch without restarting">
                 <select className="form-select" name="model" value={form.model} onChange={handleChange}>
                   {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
@@ -322,10 +340,10 @@ export default function Settings() {
           </div>
         )}
 
-        {/* ── GitHub ────────────────────────────────────────────────────────── */}
+        {/* ── GitLab ────────────────────────────────────────────────────────── */}
         {activeSection === 'github' && (
           <div className="glass settings-section">
-            <h3 className="settings-section-title"><span>⎇</span> GitHub Settings</h3>
+            <h3 className="settings-section-title"><span>⎇</span> GitLab Settings</h3>
 
             <div className="settings-fields">
               <div className="settings-field-full">
@@ -337,17 +355,31 @@ export default function Settings() {
                   badge={<LiveBadge />}
                   help={displayed.github_pat
                     ? `Current: ${displayed.github_pat}`
-                    : 'Required for repo analysis — needs repo:read scope'}
+                    : 'Required for repo analysis — needs read_api + read_repository scope'}
                 />
               </div>
 
-              <FormField label="Organization / User" badge={<LiveBadge />} help="GitHub org or user to search repos in (e.g. oscorpAI)">
+              <FormField label="Group / Namespace" badge={<LiveBadge />} help="GitLab group or namespace to search repos in (e.g. oscorpAI)">
                 <input
                   type="text" className="form-input"
                   name="github_org" value={form.github_org}
                   onChange={handleChange} placeholder="e.g. oscorpAI"
                 />
               </FormField>
+
+              <div className="settings-field-full">
+                <FormField label="GitLab URL" badge={<LiveBadge />}
+                  help={displayed.gitlab_url
+                    ? `Current: ${displayed.gitlab_url}`
+                    : 'Base URL of your GitLab instance (e.g. http://gitlab.example.com)'}>
+                  <input
+                    type="text" className="form-input"
+                    name="gitlab_url" value={form.gitlab_url}
+                    onChange={handleChange}
+                    placeholder="http://gitlab.example.com"
+                  />
+                </FormField>
+              </div>
             </div>
 
             <SettingsActions

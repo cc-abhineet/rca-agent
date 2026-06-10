@@ -193,7 +193,6 @@ function EventBody({ ev, stepNum }) {
     case 'reasoning':
       return (
         <div className="evb-reasoning">
-          {stepNum && <div className="evb-step-badge">Step {stepNum}</div>}
           <div className="evb-reasoning-text"><Typewriter text={ev.text || ''} speed={6} /></div>
         </div>
       )

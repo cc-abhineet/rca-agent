@@ -322,7 +322,8 @@ export default function RCADashboard() {
       return
     }
     if (action === 'report') {
-      window.open(`/rca/${log.id}/report`, '_blank')
+      const reportId = log.duplicate_of || log.id
+      window.open(`/rca/${reportId}/report`, '_blank')
       return
     }
     if (action === 'run') {

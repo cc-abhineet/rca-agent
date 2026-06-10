@@ -10,7 +10,7 @@ from typing import Optional
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -267,31 +267,10 @@ def get_rca_report(error_log_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Error log not found")
 
-    duplicate_banner = None
     if row.get("duplicate_of"):
+        # Always redirect to the original incident's report page.
         original_id = str(row["duplicate_of"])
-        original = execute_one(
-            "SELECT rca_result, rca_status, occurred_at FROM error_logs WHERE id = %s",
-            (original_id,),
-        )
-        if not original:
-            # Original was deleted — fall back to this row's own (absent) report.
-            return HTMLResponse(
-                content="<html><body><h2>Duplicate</h2>"
-                        "<p>The original incident this duplicates no longer exists.</p></body></html>",
-                status_code=202,
-            )
-        first_seen = str(original["occurred_at"])[:19] if original.get("occurred_at") else ""
-        duplicate_banner = render_duplicate_banner(original_id, first_seen)
-        if original["rca_status"] != "completed" or not original["rca_result"]:
-            return HTMLResponse(
-                content=f"<html><body><h2>Duplicate — original RCA {original['rca_status']}</h2>"
-                        f"<p>This is a duplicate of incident {original_id[:8]}. "
-                        f"Its root-cause analysis is not available yet.</p></body></html>",
-                status_code=202,
-            )
-        report_dict = json_loads(original["rca_result"])
-        return HTMLResponse(content=render_rca_html(report_dict, duplicate_banner=duplicate_banner))
+        return RedirectResponse(url=f"/rca/{original_id}/report", status_code=302)
 
     if row["rca_status"] != "completed" or not row["rca_result"]:
         return HTMLResponse(
@@ -535,6 +514,8 @@ def api_get_settings():
         "observability_adapter": _get_overlay("observability_adapter") or settings.observability_adapter,
         "cicd_adapter": _get_overlay("cicd_adapter") or settings.cicd_adapter,
         "database_url": masked_db,
+        "gitlab_url": _get_overlay("gitlab_url") or settings.gitlab_url,
+        "gemini_api_key": _mask(_get_overlay("gemini_api_key") or settings.gemini_api_key),
     }
 
 
@@ -542,6 +523,8 @@ class SettingsUpdate(BaseModel):
     anthropic_api_key: Optional[str] = None
     github_pat: Optional[str] = None
     github_org: Optional[str] = None
+    gitlab_url: Optional[str] = None
+    gemini_api_key: Optional[str] = None
     model: Optional[str] = None
     max_react_iterations: Optional[int] = None
     dd_api_key: Optional[str] = None
@@ -1088,6 +1071,38 @@ def api_token_usage_by_incident(limit: int = Query(50, ge=1, le=200)):
             "max_iteration":        row.get("max_iteration"),
             "started_at":           str(row["started_at"])[:19] if row.get("started_at") else "",
         })
+    # Step 4 — append duplicate incidents (they have no token_usage rows)
+    seen_ids = {inc["error_log_id"] for inc in incidents}
+    dup_rows = execute(
+        """SELECT id, service_name, error_type, occurred_at, duplicate_of
+           FROM error_logs
+           WHERE rca_status = 'duplicate'
+           ORDER BY occurred_at DESC
+           LIMIT %s""",
+        (limit,),
+    )
+    for row in (dup_rows or []):
+        eid = str(row["id"])
+        if eid in seen_ids:
+            continue
+        incidents.append({
+            "error_log_id":          eid,
+            "service_name":          row.get("service_name") or "unknown",
+            "error_type":            row.get("error_type")   or "UnknownError",
+            "occurred_at":           str(row["occurred_at"])[:19] if row.get("occurred_at") else "",
+            "rca_status":            "duplicate",
+            "duplicate_of":          str(row["duplicate_of"])[:36] if row.get("duplicate_of") else "",
+            "call_count":            0,
+            "input_tokens":          0,
+            "output_tokens":         0,
+            "cache_read_tokens":     0,
+            "cache_creation_tokens": 0,
+            "total_tokens":          0,
+            "total_cost":            0.0,
+            "max_iteration":         None,
+            "started_at":            str(row["occurred_at"])[:19] if row.get("occurred_at") else "",
+        })
+
     return {"incidents": incidents}
 
 

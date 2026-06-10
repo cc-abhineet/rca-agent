@@ -114,7 +114,7 @@ function LogCard({ log, onRunRCA, onCancel }) {
               ⧉ Duplicate
             </span>
           )}
-          {log.rca_status && (
+          {log.rca_status && !isDuplicate && (
             <span className={`status-badge status-${log.rca_status}`}>
               <span className="dot" />
               {log.rca_status.replace('_', ' ')}
@@ -134,7 +134,7 @@ function LogCard({ log, onRunRCA, onCancel }) {
               <button
                 className="btn btn-secondary"
                 style={{ fontSize: 12, padding: '4px 10px' }}
-                onClick={() => window.open(`/rca/${log.id}/report`, '_blank')}
+                onClick={() => window.open(`/rca/${log.duplicate_of || log.id}/report`, '_blank')}
               >
                 View Report
               </button>

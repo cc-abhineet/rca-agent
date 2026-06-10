@@ -44,14 +44,16 @@ Open `.env` in the **root** of the repo and fill in your values:
 # ── Anthropic (required for RCA agent) ───────────────────────────────────────
 ANTHROPIC_API_KEY=sk-ant-...
 
+# ── Google Gemini (required for error classification) ────────────────────────
+GEMINI_API_KEY=AIza...
+
 # ── GitLab (required for code analysis in RCA) ───────────────────────────────
-# Create a GitLab Personal Access Token with scopes: read_api + read_repository
+# Create a Personal Access Token: GitLab → User Settings → Access Tokens
+# Required scopes: read_api + read_repository
+# Note: named GITHUB_PAT for backwards compatibility — accepts a GitLab token (glpat-...)
 GITHUB_PAT=glpat-...
 GITHUB_ORG=apollo
 GITLAB_URL=http://<your-gitlab-host>
-
-# ── Google Gemini (required for error classification) ────────────────────────
-GEMINI_API_KEY=AIza...
 
 # ── Datadog (optional — only needed for Datadog mode) ────────────────────────
 DD_API_KEY=...
@@ -59,12 +61,15 @@ DD_APP_KEY=...
 DD_SITE=us5.datadoghq.com
 
 # ── Database ──────────────────────────────────────────────────────────────────
-DATABASE_URL=mysql+pymysql://root:<your-password>@host.docker.internal:3306/rca_db
+# DB_PASSWORD is used by docker-compose to build the container DATABASE_URL
+# (with host.docker.internal). DATABASE_URL here is for running agents locally.
+DB_PASSWORD=<your-mysql-password>
+DATABASE_URL=mysql+pymysql://root:<your-mysql-password>@localhost:3306/rca_db
 ```
 
-> **`host.docker.internal`** resolves to your host machine from inside Docker containers. On Linux this is mapped automatically via `extra_hosts: host-gateway` in `docker-compose.yml`.
+> **`DB_PASSWORD`** is read by `docker-compose.yml` to construct `DATABASE_URL` with `host.docker.internal` for container → host MySQL connectivity. The `DATABASE_URL` in `.env` (with `localhost`) is used when running agents directly on your machine outside Docker.
 
-> **GitLab PAT** — This is used by the RCA agent to fetch source files from your self-hosted GitLab. The field is named `GITHUB_PAT` in `.env` for backwards compatibility but accepts a GitLab token (`glpat-...`).
+> **GitLab PAT** — used by the RCA agent to fetch source files from your self-hosted GitLab. The field is named `GITHUB_PAT` in `.env` for backwards compatibility but accepts a GitLab token (`glpat-...`).
 
 ---
 
@@ -221,7 +226,7 @@ Go to the **Reports** tab to browse all completed RCAs:
 ## Token Consumption Tab
 
 Shows cost and token usage broken down two ways:
-- **Per-incident**: each error_log_id gets its own card showing total tokens, cost, call count, and expandable per-call table
+- **Per-incident**: each error_log_id gets its own card showing total tokens, cost, call count, and expandable per-call table. Duplicate incidents show a zero-token banner with the original incident ID clearly referenced.
 - **Per-model**: breakdown across Claude model versions
 - **Hero stats**: total input/output/cache tokens and total cost
 
@@ -244,9 +249,16 @@ The ingestion agent pulls errors from Datadog Logs API, resuming from the exact 
 Update credentials and settings at runtime without restarting:
 
 1. Go to **Settings** in Apollo
-2. Update any field (API keys, model, GitLab PAT, GitLab URL, max iterations)
-3. Click **⚡ Test Credentials** to verify
+2. Update any field:
+   - **Claude AI** — Anthropic API key, Gemini API key, model, max iterations
+   - **GitLab** — Personal Access Token, group/namespace, GitLab URL
+   - **Datadog** — API key, application key, site
+   - **Observability / CI-CD** — adapter selection (restart required)
+   - **Database** — connection URL
+3. Click **⚡ Test Credentials** to verify (available for Claude, GitLab, and Datadog)
 4. Click **Save Changes** — takes effect on the next RCA run
+
+> **Gemini API Key** changes require a restart of the `ingestion-agent` container — it reads from the environment, not the settings overlay.
 
 Settings are stored in `/app/apollo_settings.json` inside the rca-agent container with a 5-second TTL cache.
 
@@ -254,25 +266,27 @@ Settings are stored in `/app/apollo_settings.json` inside the rca-agent containe
 
 ## Key Environment Variables (docker-compose.yml)
 
-The `rca-agent` service uses:
+All values are read from `.env` via variable interpolation — no hardcoded literals. The `rca-agent` service uses:
 
 ```yaml
+env_file: .env          # loads all vars from .env
 environment:
-  DATABASE_URL:         mysql+pymysql://root:varun@host.docker.internal:3306/rca_db
-  OBSERVABILITY_ADAPTER: "local"
-  CICD_ADAPTER:         "mock"
-  GITHUB_ORG:           "apollo"
-  GITLAB_URL:           "http://<your-gitlab-host>"
-  MODEL:                "claude-haiku-4-5-20251001"
-  MAX_REACT_ITERATIONS: "20"
+  # Intentional override: .env uses localhost; containers need host.docker.internal
+  DATABASE_URL:         mysql+pymysql://root:${DB_PASSWORD}@host.docker.internal:3306/rca_db
+  OBSERVABILITY_ADAPTER: ${OBSERVABILITY_ADAPTER:-local}
+  CICD_ADAPTER:         ${CICD_ADAPTER:-mock}
+  GITHUB_ORG:           ${GITHUB_ORG:-apollo}
+  GITLAB_URL:           ${GITLAB_URL}
+  MODEL:                ${MODEL:-claude-haiku-4-5-20251001}
+  MAX_REACT_ITERATIONS: ${MAX_REACT_ITERATIONS:-20}
 ```
 
-To change model or iterations permanently:
+Change any of these in `.env` and restart the container — no image rebuild needed:
 ```bash
-docker compose build rca-agent && docker compose up -d rca-agent
+docker compose up -d rca-agent
 ```
 
-Or change at runtime via **Settings** (no restart needed).
+Or change model, iterations, and most credentials at runtime via **Settings** (no restart at all).
 
 ---
 
@@ -297,8 +311,9 @@ docker compose logs ingestion-agent
 - Trigger an error from http://localhost:5000 and watch the ingestion-agent logs
 
 **RCA agent says "GitLab token is invalid"**
-- Check `GITHUB_PAT` in `.env` — must be a GitLab PAT (`glpat-...`) not a GitHub token
+- Check `GITHUB_PAT` in `.env` — must be a GitLab PAT (`glpat-...`), not a GitHub token
 - Token needs `read_api` + `read_repository` scopes
+- Check `GITLAB_URL` in `.env` points to your self-hosted GitLab base URL (no trailing slash)
 - Verify the repo exists: `http://<gitlab-host>/apollo/banking-app`
 
 **`rca_reports` table is empty**

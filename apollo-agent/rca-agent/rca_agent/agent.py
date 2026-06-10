@@ -72,6 +72,26 @@ class _FinishRCA(Exception):
 
 SYSTEM_PROMPT = """You are an expert Site Reliability Engineer performing automated Root Cause Analysis (RCA).
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HARD CONSTRAINT — CHAOS / FAULT-INJECTION (read before doing anything else)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ChaosController, ChaosException, and any file under a /chaos/ or fault_inject path are
+intentional test-scaffolding that deliberately throw exceptions to simulate failures.
+They are ALWAYS the trigger — NEVER the root cause.
+
+ABSOLUTE RULES (no exceptions, enforced by the tool layer):
+1. Chaos frames in a stack trace are NOISE. Discard every ChaosController / ChaosException
+   frame immediately and investigate the real business-logic class beneath it
+   (e.g., AccountService, OrderService, PricingService).
+2. NEVER request a chaos file via get_repo_file. The tool will reject it and return an advisory.
+   When you receive that advisory, obey it — move on to the actual business code.
+3. Chaos paths returned by search results must be ignored. Do not click through, do not cite them.
+4. root_cause.code_reference.file in your final report MUST point to real business or
+   infrastructure code. A chaos path in that field is an invalid report.
+5. If the entire stack trace consists of chaos frames, identify the service under test and
+   investigate its own source code and dependencies for the real cause.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 CORE PRINCIPLE: An error in service A is sometimes caused by a breaking change in service B (upstream).
 Always consider cross-service causation before concluding the root cause is local.
 
@@ -95,7 +115,7 @@ RULES:
 - write_dependency_memory MUST be called BEFORE finish_rca (never after — the loop exits on finish_rca).
 - Confidence levels: "high" = direct evidence in diff/code; "medium" = strong inference from context; "low" = circumstantial.
 - Keep suggested_solutions practical, prioritised (1 = most urgent), and actionable.
-- CHAOS / FAULT-INJECTION FILES: ChaosController and ChaosException are intentional test-scaffolding that deliberately throw exceptions to simulate failures for chaos engineering. They are TRIGGERS — never root causes. If a stack trace contains a frame from ChaosController, skip it entirely and investigate the real business-logic class being exercised (e.g., AccountService, OrderService, PricingService). Your code_reference and root cause MUST point to actual business or infrastructure code, never to ChaosController or ChaosException.
+- CHAOS FILES: See hard constraint at the top of this prompt. Chaos frames are always triggers, never root causes. The tool layer blocks chaos file fetches and filters chaos paths from search results — obey those signals immediately.
 - LINE NUMBERS: File content is returned with explicit line numbers in the format "  N | <source line>". Always read these prefixed numbers — do not count lines yourself. When reporting code_reference.line, use the N from the prefix of the exact line you are citing.
 
 RCA REPORT SCHEMA (pass as JSON to finish_rca):
@@ -956,11 +976,19 @@ class RCAAgent:
             return result
 
         if name == "search_code_in_repo":
-            return search_code_in_repo(
+            result = search_code_in_repo(
                 inp.get("org", repo_info["org"]),
                 inp.get("repo", repo_info["repo"]),
                 inp["query"],
             )
+            if "results" in result:
+                items = result["results"]
+                filtered = [r for r in items if not _is_chaos_path(r.get("path", ""))]
+                if len(filtered) < len(items):
+                    result = dict(result)
+                    result["results"] = filtered
+                    result["chaos_files_hidden"] = len(items) - len(filtered)
+            return result
 
         if name == "get_commit_diff":
             org = inp.get("org", repo_info["org"])
@@ -986,11 +1014,20 @@ class RCAAgent:
             )
 
         if name == "search_github_global":
-            return search_github_global(
+            result = search_github_global(
                 query=inp["query"],
                 org=inp.get("org", repo_info.get("org")),
                 max_results=inp.get("max_results", 15),
             )
+            if "results" in result:
+                items = result["results"]
+                filtered = [r for r in items if not _is_chaos_path(r.get("path", ""))]
+                if len(filtered) < len(items):
+                    result = dict(result)
+                    result["results"] = filtered
+                    result["count"] = len(filtered)
+                    result["chaos_files_hidden"] = len(items) - len(filtered)
+            return result
 
         if name == "get_recent_deployments":
             from datetime import timedelta

@@ -264,10 +264,11 @@ POST /chaos/<scenario>
 
 ### Why the agent won't blame ChaosController
 
-The RCA agent has three layers of chaos avoidance:
-1. **System prompt rule**: "ChaosController is a trigger, not the root cause — skip it"
+The RCA agent has four layers of chaos avoidance:
+1. **System prompt hard constraint**: block at top of prompt — chaos frames are noise, never request a chaos file, root cause must point to business or infrastructure code
 2. **`get_repo_file` dispatch**: chaos file paths return an advisory message instead of file content
 3. **`list_repo_files` dispatch**: chaos files stripped from directory listings
+4. **Search result filtering**: `search_code_in_repo` and `search_github_global` results have chaos-path matches stripped before the agent sees them; a `chaos_files_hidden` count is appended so the agent knows they were removed
 
 ---
 
@@ -276,15 +277,17 @@ The RCA agent has three layers of chaos avoidance:
 The platform uses a self-hosted GitLab instance for code analysis. `github_tools.py` (name kept for historical reasons) uses the `python-gitlab` library.
 
 ```
-Settings UI → GitHub PAT field → stores a GitLab Personal Access Token (glpat-...)
+Settings UI → GitLab PAT field → stores a GitLab Personal Access Token (glpat-...)
                                   Required scopes: read_api + read_repository
 ```
 
-Key environment variables:
+Key environment variables (set in `.env`, picked up by docker-compose via `${VAR}` interpolation):
 ```env
 GITHUB_PAT=glpat-...                        # GitLab PAT (read_api + read_repository)
 GITHUB_ORG=apollo                           # GitLab group name
 GITLAB_URL=http://<your-gitlab-host>        # self-hosted GitLab base URL
+DB_PASSWORD=<mysql-password>                # used by docker-compose to build DATABASE_URL
+                                            # with host.docker.internal for container→host MySQL
 ```
 
 File content returned by `get_repo_file` is line-numbered before being sent to Claude:
@@ -347,9 +350,13 @@ _active_jobs = {
 | gemini_category | VARCHAR | code_defect / config_error / dependency_failure / … |
 | gemini_analysis | TEXT | ≤40-word root cause from Gemini |
 | gemini_suggestions | TEXT | 3 fix suggestions separated by `;` |
-| rca_status | VARCHAR | pending / in_progress / completed / failed |
+| rca_status | VARCHAR | pending / in_progress / completed / failed / duplicate |
 | rca_result | JSON | full RCAReport v1.1 JSON |
 | metadata | JSON | `{source: "db_watcher"\|"datadog_poll", raw_log: "..."}` |
+| fingerprint | VARCHAR(64) | SHA-256 of (service_name + error_type + stack signature) — dedup key |
+| duplicate_of | VARCHAR(36) | FK → error_logs.id of the original incident; set when rca_status = 'duplicate' |
+| occurrence_count | INT | how many times this fingerprint has been seen (incremented on the original) |
+| last_seen_at | DATETIME | timestamp of the most recent duplicate arrival |
 
 ### `rca_reports`
 Dedicated completed-RCA table. Written by `agent._persist()` after every successful RCA.
@@ -389,7 +396,7 @@ Maps service names → GitLab org/repo. Populated by `add_service_map.py`.
 | `RCAStreamPanel.jsx` | Full-screen SSE overlay: neural canvas, phase tracker, iteration groups, confidence gauge, filter bar, session cache |
 | `ReportsPage.jsx` | Browse all completed RCAs; search + confidence filter + sort; inline detail panel; PDF download |
 | `TokenUsage.jsx` | Hero totals, per-model breakdown, per-incident cards (IncidentCard + AllCallsSection) |
-| `Settings.jsx` | 5 sections; ⚡ Test Credentials; instant vs restart badges; GitLab URL field |
+| `Settings.jsx` | 5 sections (Claude AI, GitLab, Datadog, Observability, Database); Gemini API key + GitLab URL fields; ⚡ Test Credentials; instant vs restart badges |
 
 ### RCA Stream Panel Features
 - **Neural background**: animated node-network canvas, speeds up while agent is running
@@ -407,10 +414,11 @@ Maps service names → GitLab org/repo. Populated by `add_service_map.py`.
 | Setting | Effect |
 |---|---|
 | Anthropic API Key | Instant — new client per RCA run |
+| Gemini API Key | **Ingestion agent restart required** — ingestion agent reads from env, not overlay |
 | Model | Instant — read at start of every RCA run |
 | Max Iterations | Instant — default: 20 |
-| GitHub PAT (GitLab token) | Instant — python-gitlab client recreated when token changes |
-| GitHub Org (GitLab group) | Instant — read on every repo resolution |
+| GitLab PAT | Instant — python-gitlab client recreated when token changes |
+| GitLab Group / Namespace | Instant — read on every repo resolution |
 | GitLab URL | Instant — read on every GitLab client creation |
 | Database URL | Instant — read from overlay on every new connection |
 | DD API Key / App Key / Site | Instant for Log Explorer; forwarded to ingestion agent on Start |

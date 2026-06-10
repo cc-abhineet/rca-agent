@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     github_pat: str = ""
     github_org: str = "apollo"
     gitlab_url: str = "http://devopstools-1761743684.us-east-2.elb.amazonaws.com"
+    gemini_api_key: str = ""
     database_url: str = "mysql+pymysql://root:root@localhost:3306/rca_db"
     model: str = "claude-haiku-4-5-20251001"
     max_react_iterations: int = 20

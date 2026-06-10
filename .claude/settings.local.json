@@ -33,7 +33,9 @@
       "Bash(xargs grep -l \"confidence\\\\|92\\\\|65\\\\|38\")",
       "Bash(git mv *)",
       "Bash(Remove-Item -Recurse -Force banking-app-master)",
-      "PowerShell(Remove-Item *)"
+      "PowerShell(Remove-Item *)",
+      "Bash(del \"e:\\\\WISSEN\\\\rca-agent-abhineet\\\\rca-agent\\\\update_pptx.py\")",
+      "Bash(del *)"
     ]
   }
 }

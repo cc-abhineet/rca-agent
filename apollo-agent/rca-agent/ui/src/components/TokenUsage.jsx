@@ -55,6 +55,7 @@ function statusCfg(status) {
     case 'completed':   return { label: 'Completed',   color: '#10B981', bg: 'rgba(16,185,129,0.15)',  icon: '✓' }
     case 'in_progress': return { label: 'In Progress', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)',  icon: '⟳' }
     case 'failed':      return { label: 'Failed',      color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   icon: '✗' }
+    case 'duplicate':   return { label: 'Duplicate',   color: '#A78BFA', bg: 'rgba(167,139,250,0.15)', icon: '⧉' }
     default:            return { label: 'Pending',     color: '#94A3B8', bg: 'rgba(148,163,184,0.1)',  icon: '○' }
   }
 }
@@ -145,27 +146,27 @@ function IncidentCard({ incident, callRows }) {
   const [open, setOpen] = useState(false)
   const svc = svcColor(incident.service_name)
   const st  = statusCfg(incident.rca_status)
+  const isDuplicate = incident.rca_status === 'duplicate'
 
   const relatedCalls = callRows.filter(r => r.error_log_id === incident.error_log_id)
-  const totalAll     = (incident.input_tokens || 0) + (incident.output_tokens || 0)
 
   return (
     <div className="tu-incident-card glass">
 
       {/* Coloured left accent bar */}
-      <div className="tu-incident-accent" style={{ background: svc.dot }} />
+      <div className="tu-incident-accent" style={{ background: isDuplicate ? '#A78BFA' : svc.dot }} />
 
       <div className="tu-incident-body">
         {/* ── Top row: identity + status ── */}
         <div
           className="tu-inc-header"
-          onClick={() => relatedCalls.length > 0 && setOpen(o => !o)}
-          style={{ cursor: relatedCalls.length > 0 ? 'pointer' : 'default' }}
+          onClick={() => !isDuplicate && relatedCalls.length > 0 && setOpen(o => !o)}
+          style={{ cursor: !isDuplicate && relatedCalls.length > 0 ? 'pointer' : 'default' }}
         >
           <div className="tu-inc-identity">
-            <span className="tu-inc-dot" style={{ background: svc.dot }} />
+            <span className="tu-inc-dot" style={{ background: isDuplicate ? '#A78BFA' : svc.dot }} />
             <div className="tu-inc-names">
-              <span className="tu-inc-service" style={{ color: svc.color }}>
+              <span className="tu-inc-service" style={{ color: isDuplicate ? '#A78BFA' : svc.color }}>
                 {incident.service_name}
               </span>
               <span className="tu-inc-error">{incident.error_type}</span>
@@ -177,13 +178,19 @@ function IncidentCard({ incident, callRows }) {
             <span className="tu-inc-status-badge" style={{ color: st.color, background: st.bg }}>
               {st.icon} {st.label}
             </span>
-            {incident.max_iteration != null && (
+            {!isDuplicate && incident.max_iteration != null && (
               <span className="tu-inc-pill">{incident.max_iteration} iters</span>
             )}
-            <span className="tu-inc-pill tu-inc-calls-count">{incident.call_count} calls</span>
-            <span className="tu-inc-cost-val">{fmtCost(incident.total_cost)}</span>
-            <span className="tu-inc-tokens-val">{fmtTokens(incident.total_tokens)}</span>
-            {relatedCalls.length > 0 && (
+            {!isDuplicate && (
+              <span className="tu-inc-pill tu-inc-calls-count">{incident.call_count} calls</span>
+            )}
+            {!isDuplicate && (
+              <span className="tu-inc-cost-val">{fmtCost(incident.total_cost)}</span>
+            )}
+            {!isDuplicate && (
+              <span className="tu-inc-tokens-val">{fmtTokens(incident.total_tokens)}</span>
+            )}
+            {!isDuplicate && relatedCalls.length > 0 && (
               <button className="tu-inc-toggle" aria-label="expand">
                 {open ? '▲' : '▼'}
               </button>
@@ -191,27 +198,66 @@ function IncidentCard({ incident, callRows }) {
           </div>
         </div>
 
-        {/* ── Token bar ── */}
-        <div className="tu-inc-bar-section">
-          <TokenBar
-            input={incident.input_tokens}
-            output={incident.output_tokens}
-            cacheRead={incident.cache_read_tokens}
-          />
-          <div className="tu-inc-bar-labels">
-            <span><span className="tu-inc-bar-dot tu-dot-in" />{fmtTokens(incident.input_tokens)} in</span>
-            <span><span className="tu-inc-bar-dot tu-dot-out" />{fmtTokens(incident.output_tokens)} out</span>
-            {incident.cache_read_tokens > 0 && (
-              <span><span className="tu-inc-bar-dot tu-dot-cache" />{fmtTokens(incident.cache_read_tokens)} cache</span>
+        {/* ── Duplicate zero-token banner ── */}
+        {isDuplicate ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 12px', margin: '6px 0 2px',
+            borderRadius: 8,
+            background: 'rgba(167,139,250,0.08)',
+            border: '1px solid rgba(167,139,250,0.2)',
+            fontSize: 12,
+          }}>
+            <span style={{ color: '#A78BFA', fontWeight: 700, letterSpacing: 0.3 }}>0 tokens used</span>
+            <span style={{ color: 'var(--text-muted)' }}>—</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Reused previous RCA report</span>
+            {incident.duplicate_of && (
+              <>
+                <span style={{ color: 'var(--text-muted)' }}>·</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                  Original ID:&nbsp;
+                  <span style={{
+                    fontFamily: 'monospace', color: '#A78BFA',
+                    background: 'rgba(167,139,250,0.12)',
+                    padding: '1px 5px', borderRadius: 4,
+                  }}>
+                    {incident.duplicate_of.slice(0, 8)}…
+                  </span>
+                </span>
+              </>
             )}
             {incident.occurred_at && (
-              <span className="tu-inc-occurred">Occurred: {incident.occurred_at.replace('T', ' ')}</span>
+              <>
+                <span style={{ color: 'var(--text-muted)' }}>·</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                  {incident.occurred_at.replace('T', ' ')}
+                </span>
+              </>
             )}
           </div>
-        </div>
+        ) : (
+          /* ── Token bar (non-duplicate) ── */
+          <div className="tu-inc-bar-section">
+            <TokenBar
+              input={incident.input_tokens}
+              output={incident.output_tokens}
+              cacheRead={incident.cache_read_tokens}
+            />
+            <div className="tu-inc-bar-labels">
+              <span><span className="tu-inc-bar-dot tu-dot-in" />{fmtTokens(incident.input_tokens)} in</span>
+              <span><span className="tu-inc-bar-dot tu-dot-out" />{fmtTokens(incident.output_tokens)} out</span>
+              {incident.cache_read_tokens > 0 && (
+                <span><span className="tu-inc-bar-dot tu-dot-cache" />{fmtTokens(incident.cache_read_tokens)} cache</span>
+              )}
+              {incident.occurred_at && (
+                <span className="tu-inc-occurred">Occurred: {incident.occurred_at.replace('T', ' ')}</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Expanded: per-call table ── */}
-        {open && relatedCalls.length > 0 && (
+        {!isDuplicate && open && relatedCalls.length > 0 && (
           <div className="tu-inc-calls-wrap">
             <div className="tu-inc-calls-title">API Calls for this incident</div>
             <div className="tu-table-wrap">

@@ -101,13 +101,13 @@ services:
       dockerfile: error-ingestion-agent/Dockerfile
     env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://rca:rca_pass@host.docker.internal:3306/rca_db
-      MODE: "db"
+      # DATABASE_URL intentionally overrides .env — see rca-agent comment above.
+      DATABASE_URL: mysql+pymysql://root:${DB_PASSWORD}@host.docker.internal:3306/rca_db
+      MODE: ${MODE:-db}
       LOG_FILE_PATHS: "/var/log/banking-app/app.log"
       SERVICE_NAME: "banking-app"
-      ENVIRONMENT: "dev"
-      # DD_API_KEY / DD_SITE come from .env.
-      # When set, all log lines are shipped to Datadog in a background thread.
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      # DD_API_KEY / DD_SITE / GEMINI_API_KEY come from .env via env_file above.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -127,13 +127,15 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://rca:rca_pass@host.docker.internal:3306/rca_db
-      OBSERVABILITY_ADAPTER: "local"
-      CICD_ADAPTER: "mock"
-      GITHUB_ORG: "apollo"
-      GITLAB_URL: "http://devopstools-1761743684.us-east-2.elb.amazonaws.com"
-      MODEL: "claude-haiku-4-5-20251001"
-      MAX_REACT_ITERATIONS: "20"
+      # DATABASE_URL intentionally overrides .env: containers must use host.docker.internal
+      # to reach host MySQL; .env uses localhost for non-Docker local dev.
+      DATABASE_URL: mysql+pymysql://root:${DB_PASSWORD}@host.docker.internal:3306/rca_db
+      OBSERVABILITY_ADAPTER: ${OBSERVABILITY_ADAPTER:-local}
+      CICD_ADAPTER: ${CICD_ADAPTER:-mock}
+      GITHUB_ORG: ${GITHUB_ORG:-apollo}
+      GITLAB_URL: ${GITLAB_URL}
+      MODEL: ${MODEL:-claude-haiku-4-5-20251001}
+      MAX_REACT_ITERATIONS: ${MAX_REACT_ITERATIONS:-20}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
