@@ -1,5 +1,7 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { clearToken, getUsername } from '../api/client'
 
 const NAV_ITEMS = [
   {
@@ -52,10 +54,17 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ healthOk }) {
   const { activeNav, setActiveNav, newReportCount, clearNewReports } = useApp()
+  const navigate  = useNavigate()
+  const username  = getUsername()
 
   const handleNavClick = (id) => {
     setActiveNav(id)
     if (id === 'reports') clearNewReports()
+  }
+
+  const handleSignOut = () => {
+    clearToken()
+    navigate('/login', { replace: true })
   }
 
   return (
@@ -88,11 +97,27 @@ export default function Sidebar({ healthOk }) {
       </nav>
 
       <div className="sidebar-footer">
-        <span className="sidebar-version">v1.0</span>
-        <div
-          className={`sidebar-status-dot ${healthOk ? 'ok' : 'error'}`}
-          title={healthOk ? 'API healthy' : 'API unreachable'}
-        />
+        {username && (
+          <div className="sidebar-user">
+            <span className="sidebar-user-avatar">
+              {username[0].toUpperCase()}
+            </span>
+            <span className="sidebar-user-name">{username}</span>
+          </div>
+        )}
+        <div className="sidebar-footer-row">
+          <span className="sidebar-version">v1.0</span>
+          <div
+            className={`sidebar-status-dot ${healthOk ? 'ok' : 'error'}`}
+            title={healthOk ? 'API healthy' : 'API unreachable'}
+          />
+        </div>
+        <button className="sidebar-signout" onClick={handleSignOut} title="Sign out">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Sign Out
+        </button>
       </div>
     </aside>
   )

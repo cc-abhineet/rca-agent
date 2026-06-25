@@ -8,14 +8,18 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from rca_agent.config import settings
 from rca_agent.db import execute, execute_one, json_loads, get_conn, create_token_usage_table
+from app.auth import (
+    create_users_table, create_user, get_user_by_username,
+    verify_password, create_token, decode_token, touch_last_login,
+)
 from rca_agent.adapters.observability.local_db import LocalDBAdapter
 from rca_agent.adapters.cicd.mock_adapter import MockCICDAdapter
 from rca_agent.agent import RCAAgent
@@ -116,9 +120,13 @@ def _effective_agent_settings() -> dict:
 
 _load_settings_overlay()
 
-# Ensure token_usage table exists at startup (idempotent)
+# Ensure token_usage and users tables exist at startup (idempotent)
 try:
     create_token_usage_table()
+except Exception:
+    pass
+try:
+    create_users_table()
 except Exception:
     pass
 
@@ -135,6 +143,81 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Auth middleware ───────────────────────────────────────────────────────────
+# Protects /api/* and /rca/* — allows through /auth/*, /health, static files.
+# Accepts token via  Authorization: Bearer <token>  OR  ?token=<token>  (for
+# EventSource / window.open() callers that can't set custom headers).
+
+_PROTECTED = ("/api/", "/rca/")
+_EXEMPT    = ("/auth/", "/health", "/demo")
+
+
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if not any(path.startswith(p) for p in _PROTECTED):
+        return await call_next(request)
+    if any(path.startswith(e) for e in _EXEMPT):
+        return await call_next(request)
+
+    # Extract token from header or query param
+    token = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    if not token:
+        token = request.query_params.get("token")
+
+    if not token or decode_token(token) is None:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
+    return await call_next(request)
+
+
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+class _RegisterBody(BaseModel):
+    username: str
+    password: str
+
+class _LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/auth/register")
+def auth_register(body: _RegisterBody):
+    username = body.username.strip()
+    if len(username) < 3:
+        raise HTTPException(400, "Username must be at least 3 characters")
+    if len(body.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    try:
+        user = create_user(username, body.password)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    token = create_token(user["id"], user["username"])
+    return {"token": token, "username": user["username"]}
+
+
+@app.post("/auth/login")
+def auth_login(body: _LoginBody):
+    user = get_user_by_username(body.username.strip())
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(401, "Invalid username or password")
+    touch_last_login(user["id"])
+    token = create_token(user["id"], user["username"])
+    return {"token": token, "username": user["username"]}
+
+
+@app.get("/auth/me")
+def auth_me(request: Request):
+    token = request.headers.get("Authorization", "")[7:]
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(401, "Not authenticated")
+    return {"username": payload["username"]}
 
 
 @app.get("/health")
@@ -1107,7 +1190,26 @@ def api_token_usage_by_incident(limit: int = Query(50, ge=1, le=200)):
 
 
 # ── Serve React UI (MUST be last) ────────────────────────────────────────────
+# StaticFiles(html=True) does NOT fall back to index.html for arbitrary paths
+# (e.g. /login, /dashboard), so we use an explicit catch-all instead:
+#   1. Mount /assets  — Vite's hashed JS/CSS/image bundles (no SPA needed here)
+#   2. Catch-all GET  — serves real files from dist root (favicon, etc.) or
+#                       falls back to index.html so React Router handles routing
 
 _UI_DIST = Path(__file__).parent.parent / "ui" / "dist"
 if _UI_DIST.exists():
-    app.mount("/", StaticFiles(directory=str(_UI_DIST), html=True), name="ui")
+    _assets_dir = _UI_DIST / "assets"
+    if _assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="ui-assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _spa_fallback(full_path: str):
+        # Serve real files that live in the dist root (favicon.ico, manifest, etc.)
+        candidate = _UI_DIST / full_path
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        # Everything else → React SPA shell
+        index = _UI_DIST / "index.html"
+        if index.exists():
+            return HTMLResponse(index.read_text(encoding="utf-8"))
+        return HTMLResponse("UI not built — run: npm run build", status_code=503)

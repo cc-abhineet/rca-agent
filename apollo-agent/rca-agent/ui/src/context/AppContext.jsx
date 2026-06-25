@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
-import { fetchMonitoring, setMonitoring, setSource } from '../api/client'
+import { fetchMonitoring, setMonitoring, setSource, getToken } from '../api/client'
 
 const AppContext = createContext(null)
 
@@ -17,8 +17,10 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast(null), 3500)
   }, [])
 
-  // Sync monitoring state from backend on mount and every 15s
+  // Sync monitoring state from backend on mount and every 15s.
+  // Skip entirely when no auth token — avoids 401 loops on the login page.
   const syncMonitoring = useCallback(() => {
+    if (!getToken()) return
     fetchMonitoring()
       .then(data => {
         setMonitoringActive(data.monitoring_active ?? true)

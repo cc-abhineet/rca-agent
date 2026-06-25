@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchStats } from '../api/client'
+import { fetchStats, getToken } from '../api/client'
 
 function useCountUp(target, duration = 1200) {
   const [value, setValue] = useState(0)
@@ -81,6 +81,9 @@ export default function Landing() {
   const [stats, setStats] = useState({ total: 0, completed: 0, critical: 0 })
 
   useEffect(() => {
+    // Only fetch live stats when the user is authenticated — avoids a 401
+    // redirect loop on this public landing page.
+    if (!getToken()) return
     fetchStats()
       .then(s => setStats(s))
       .catch(() => {})
@@ -171,7 +174,7 @@ export default function Landing() {
         </div>
 
         {/* CTA */}
-        <button className="landing-cta" onClick={() => navigate('/dashboard')}>
+        <button className="landing-cta" onClick={() => navigate(getToken() ? '/dashboard' : '/login')}>
           Launch Apollo
           <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
