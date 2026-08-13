@@ -37,7 +37,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from config.settings import settings
-from db.database import ensure_table, close_pool
+from db.database import ensure_table, close_pool, resolve_org_id, get_org_id, set_org_id, load_org_config, get_org_config
 from agents.log_monitor.graph import process_log_entry
 from utils.log_parser import is_error_line, extract_service_name
 
@@ -256,11 +256,23 @@ class MonitoringRequest(BaseModel):
     dd_site:    str | None = None
 
 
+async def _apply_org_config():
+    """Load ingestion credentials from DB and apply to runtime state."""
+    global _dd_runtime_creds
+    cfg = await load_org_config()
+    if cfg.get("dd_api_key"):
+        _dd_runtime_creds.update({
+            k: cfg[k] for k in ("dd_api_key", "dd_app_key", "dd_site") if cfg.get(k)
+        })
+        logger.info("Datadog credentials loaded from org config")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _watcher_task
     _watcher_task = asyncio.create_task(run_file_watcher())
     _monitoring["active"] = True
+
     logger.info("Ingestion agent control server ready on port 8001")
     yield
     if _watcher_task and not _watcher_task.done():
@@ -392,6 +404,21 @@ async def set_monitoring(req: MonitoringRequest):
     }
 
 
+class OrgSwitchRequest(BaseModel):
+    org_id: str
+
+
+@control_app.post("/org")
+async def switch_org(req: OrgSwitchRequest):
+    """Called by the rca-agent when the user switches the active org in the UI.
+    Reloads ingestion credentials from agent_config immediately so the running
+    agent uses the new org's Gemini key and Datadog credentials without restart."""
+    set_org_id(req.org_id)
+    logger.info("Active org switched via API to org_id=%s", req.org_id)
+    asyncio.create_task(_apply_org_config())
+    return {"org_id": req.org_id, "switched": True}
+
+
 @control_app.get("/health")
 def health():
     return {
@@ -400,6 +427,7 @@ def health():
         "monitoring_active": _monitoring["active"],
         "dd_poller_active":  _dd_poller_task is not None and not _dd_poller_task.done(),
         "watcher_active":    _watcher_task is not None and not _watcher_task.done(),
+        "active_org_id":     get_org_id(),
         "stopped_at":        _monitoring_stopped_at.isoformat() if _monitoring_stopped_at else None,
     }
 

@@ -107,6 +107,50 @@ def create_token_usage_table() -> None:
     execute(_TOKEN_TABLE_DDL)
 
 
+# ── Organisation tables ───────────────────────────────────────────────────────
+
+_ORG_DDL = """
+CREATE TABLE IF NOT EXISTS organisations (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    owner_user_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    environment VARCHAR(50) DEFAULT 'production',
+    ingest_api_key VARCHAR(64) NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_org_owner (owner_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+_ORG_INTEGRATION_DDL = """
+CREATE TABLE IF NOT EXISTS org_integrations (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    org_id VARCHAR(36) NOT NULL,
+    user_id INT NOT NULL,
+    integration_type VARCHAR(50) NOT NULL,
+    config_json TEXT NOT NULL,
+    is_connected TINYINT(1) NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_oi_org_type (org_id, integration_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+_AGENT_CONFIG_DDL = """
+CREATE TABLE IF NOT EXISTS agent_config (
+    config_key   VARCHAR(100) NOT NULL PRIMARY KEY,
+    config_value TEXT,
+    updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def create_org_tables() -> None:
+    """Idempotent: create organisation, org_integrations, and agent_config tables."""
+    execute(_ORG_DDL)
+    execute(_ORG_INTEGRATION_DDL)
+    execute(_AGENT_CONFIG_DDL)
+
+
 def log_token_usage(
     model: str,
     source: str,

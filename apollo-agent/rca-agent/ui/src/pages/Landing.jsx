@@ -174,8 +174,8 @@ export default function Landing() {
         </div>
 
         {/* CTA */}
-        <button className="landing-cta" onClick={() => navigate(getToken() ? '/dashboard' : '/login')}>
-          Launch Apollo
+        <button className="landing-cta" onClick={() => navigate(getToken() ? '/home' : '/login')}>
+          Get Started
           <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>

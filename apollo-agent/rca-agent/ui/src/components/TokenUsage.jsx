@@ -65,11 +65,10 @@ function statusCfg(status) {
 function SourceChip({ source }) {
   const isRca    = source === 'rca_agent'
   const isGemini = source === 'gemini_analysis'
-  return (
-    <span className={`tu-chip ${isRca ? 'tu-chip-rca' : isGemini ? 'tu-chip-gemini' : 'tu-chip-default'}`}>
-      {isRca ? 'RCA Agent' : isGemini ? 'Gemini' : source}
-    </span>
-  )
+  const isChat   = source === 'chat_agent'
+  const cls   = isRca ? 'tu-chip-rca' : isGemini ? 'tu-chip-gemini' : isChat ? 'tu-chip-chat' : 'tu-chip-default'
+  const label = isRca ? 'RCA Agent' : isGemini ? 'Gemini' : isChat ? 'Chat Agent' : source
+  return <span className={`tu-chip ${cls}`}>{label}</span>
 }
 
 function TokenBar({ input, output, cacheRead }) {
@@ -255,6 +254,33 @@ function IncidentCard({ incident, callRows }) {
             </div>
           </div>
         )}
+
+        {/* ── Source breakdown: RCA vs Chat ── */}
+        {!isDuplicate && (() => {
+          const rcaCalls  = relatedCalls.filter(r => r.source === 'rca_agent')
+          const chatCalls = relatedCalls.filter(r => r.source === 'chat_agent')
+          if (!chatCalls.length) return null
+          const sumTok  = (arr) => arr.reduce((s, r) => s + (r.input_tokens || 0) + (r.output_tokens || 0), 0)
+          const sumCost = (arr) => arr.reduce((s, r) => s + (r.estimated_cost_usd || 0), 0)
+          return (
+            <div className="tu-src-breakdown">
+              <div className="tu-src-row">
+                <span className="tu-chip tu-chip-rca">RCA Agent</span>
+                <span className="tu-src-tokens">{fmtTokens(sumTok(rcaCalls))}</span>
+                <span className="tu-src-sep">·</span>
+                <span className="tu-src-cost">{fmtCost(sumCost(rcaCalls))}</span>
+                <span className="tu-src-calls">{rcaCalls.length} calls</span>
+              </div>
+              <div className="tu-src-row">
+                <span className="tu-chip tu-chip-chat">Chat Agent</span>
+                <span className="tu-src-tokens">{fmtTokens(sumTok(chatCalls))}</span>
+                <span className="tu-src-sep">·</span>
+                <span className="tu-src-cost">{fmtCost(sumCost(chatCalls))}</span>
+                <span className="tu-src-calls">{chatCalls.length} calls</span>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── Expanded: per-call table ── */}
         {!isDuplicate && open && relatedCalls.length > 0 && (

@@ -19,6 +19,8 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 _pool: Optional[aiomysql.Pool] = None
+_org_id: Optional[str] = None
+_org_config: dict = {}   # ingestion credentials loaded from agent_config table
 
 
 def _parse_dsn(database_url: str) -> dict:
@@ -88,8 +90,79 @@ CREATE TABLE IF NOT EXISTS token_usage (
 """
 
 
+async def resolve_org_id() -> bool:
+    """
+    Resolve and cache the org_id for this ingestion agent.
+
+    Resolution order:
+      1. agent_config table 'active_ingest_org_id' — set automatically by the UI
+         when an org is created or switched. No key paste needed.
+      2. APOLLO_INGEST_API_KEY env var — advanced override for multi-agent setups.
+      3. Auto-discover single org in the database as a last-resort fallback.
+
+    Returns True if an org was resolved, False if resolution should be retried later.
+    """
+    global _org_id
+
+    # Priority 1 — agent_config table (written by Apollo UI on create/switch)
+    try:
+        async with get_connection() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(
+                    "SELECT config_value FROM agent_config WHERE config_key='active_ingest_org_id'",
+                )
+                row = await cur.fetchone()
+        if row and row.get("config_value"):
+            _org_id = row["config_value"]
+            logger.info("Org loaded from agent_config — org_id=%s", _org_id)
+            return True
+    except Exception:
+        pass  # agent_config table may not exist yet on very fresh installs
+
+    # Priority 2 — explicit APOLLO_INGEST_API_KEY (advanced / multi-agent override)
+    api_key = settings.apollo_ingest_api_key.strip()
+    if api_key:
+        async with get_connection() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(
+                    "SELECT id, name FROM organisations WHERE ingest_api_key = %s LIMIT 1",
+                    (api_key,),
+                )
+                row = await cur.fetchone()
+        if row:
+            _org_id = row["id"]
+            logger.info("Org resolved from APOLLO_INGEST_API_KEY — org='%s' org_id=%s", row["name"], _org_id)
+            return True
+        logger.warning("APOLLO_INGEST_API_KEY set but no matching org found — will retry")
+        return False
+
+    # Priority 3 — single-org auto-discovery (fallback for brand-new setups)
+    async with get_connection() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute("SELECT id, name FROM organisations ORDER BY created_at ASC")
+            rows = await cur.fetchall()
+
+    if not rows:
+        logger.info(
+            "No organisations found yet — create one in the Apollo UI. "
+            "This agent will connect automatically within 30 seconds."
+        )
+        return False
+
+    if len(rows) == 1:
+        _org_id = rows[0]["id"]
+        logger.info("Auto-discovered org '%s' (only org in DB) — org_id=%s", rows[0]["name"], _org_id)
+        return True
+
+    logger.warning(
+        "Multiple orgs exist but no active org is set in agent_config. "
+        "Switch to an org in the Apollo UI to connect this agent automatically."
+    )
+    return False
+
+
 async def ensure_table() -> None:
-    """Verify error_logs table exists and create token_usage if needed."""
+    """Verify error_logs table exists, create token_usage, and resolve org_id."""
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SHOW TABLES LIKE 'error_logs'")
@@ -100,10 +173,61 @@ async def ensure_table() -> None:
                 )
             else:
                 logger.info("error_logs table ready")
-            # Create token_usage table (idempotent)
             await cur.execute(_TOKEN_TABLE_DDL)
         await conn.commit()
         logger.info("token_usage table ready")
+
+    await resolve_org_id()
+    await load_org_config()
+
+
+def get_org_id() -> Optional[str]:
+    """Return the resolved org_id for this ingestion agent instance."""
+    return _org_id
+
+
+def set_org_id(new_id: Optional[str]) -> None:
+    """Override the active org_id (called when org is switched from the UI)."""
+    global _org_id
+    _org_id = new_id
+
+
+async def load_org_config() -> dict:
+    """
+    Load ingestion credentials from agent_config.active_ingest_config.
+
+    The rca-agent writes plain-text credentials here (gemini_api_key, dd_api_key,
+    dd_app_key, dd_site, service_name, log_file_paths, mode, environment) whenever
+    the user saves ingestion settings or switches org in the UI.
+
+    Returns the config dict; empty dict if nothing is configured yet.
+    """
+    global _org_config
+    try:
+        async with get_connection() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(
+                    "SELECT config_value FROM agent_config WHERE config_key='active_ingest_config'"
+                )
+                row = await cur.fetchone()
+        if row and row.get("config_value"):
+            _org_config = json.loads(row["config_value"])
+            logger.info(
+                "Ingestion config loaded from agent_config — gemini=%s dd=%s",
+                bool(_org_config.get("gemini_api_key")),
+                bool(_org_config.get("dd_api_key")),
+            )
+        else:
+            _org_config = {}
+    except Exception as exc:
+        logger.debug("load_org_config error (non-critical): %s", exc)
+        _org_config = {}
+    return _org_config
+
+
+def get_org_config() -> dict:
+    """Return the last loaded ingestion org config (may be empty if not yet configured)."""
+    return _org_config
 
 
 def log_token_usage_sync(
@@ -256,6 +380,7 @@ async def insert_incident(
     fingerprint: Optional[str] = None,
     duplicate_of: Optional[str] = None,
     rca_status: str = "pending",
+    org_id: Optional[str] = None,
 ) -> str:
     """
     Insert a new error into error_logs (the unified table read by the RCA agent).
@@ -275,6 +400,8 @@ async def insert_incident(
 
     metadata = {"source": source, "raw_log": raw_log[:2000]}
 
+    effective_org_id = org_id or _org_id   # caller can override, otherwise use resolved global
+
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -283,8 +410,8 @@ async def insert_incident(
                     (id, service_name, environment, error_type, error_message,
                      stack_trace, severity, occurred_at, metadata, rca_status,
                      gemini_category, gemini_analysis, gemini_suggestions, risk_level,
-                     fingerprint, duplicate_of)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     fingerprint, duplicate_of, org_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     row_id,
@@ -303,6 +430,7 @@ async def insert_incident(
                     risk_level,
                     fingerprint,
                     duplicate_of,
+                    effective_org_id,
                 ),
             )
         await conn.commit()

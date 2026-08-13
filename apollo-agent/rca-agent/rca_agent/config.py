@@ -10,7 +10,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    anthropic_api_key: str
+    anthropic_api_key: str = ""
     github_pat: str = ""
     github_org: str = "apollo"
     gitlab_url: str = "http://devopstools-1761743684.us-east-2.elb.amazonaws.com"

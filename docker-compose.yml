@@ -99,15 +99,16 @@ services:
     build:
       context: ./apollo-agent
       dockerfile: error-ingestion-agent/Dockerfile
-    env_file: .env
     environment:
-      # DATABASE_URL intentionally overrides .env — see rca-agent comment above.
+      # DATABASE_URL is the only required infrastructure config.
+      # All API credentials (Gemini, Datadog) are configured through the Apollo UI
+      # and stored in the agent_config table — no env vars needed for credentials.
       DATABASE_URL: mysql+pymysql://root:${DB_PASSWORD}@host.docker.internal:3306/rca_db
+      # Startup defaults — overridden by org config once an org is active in the UI.
       MODE: ${MODE:-db}
       LOG_FILE_PATHS: "/var/log/banking-app/app.log"
       SERVICE_NAME: "banking-app"
-      ENVIRONMENT: ${ENVIRONMENT:-dev}
-      # DD_API_KEY / DD_SITE / GEMINI_API_KEY come from .env via env_file above.
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -125,17 +126,16 @@ services:
       context: ./apollo-agent/rca-agent
     ports:
       - "8000:8000"
-    env_file: .env
     environment:
-      # DATABASE_URL intentionally overrides .env: containers must use host.docker.internal
-      # to reach host MySQL; .env uses localhost for non-Docker local dev.
+      # Only infrastructure config lives here. All API credentials (Anthropic,
+      # GitHub/GitLab, Datadog) are configured through the Apollo UI and stored
+      # per-org in the database — no env vars needed.
       DATABASE_URL: mysql+pymysql://root:${DB_PASSWORD}@host.docker.internal:3306/rca_db
       OBSERVABILITY_ADAPTER: ${OBSERVABILITY_ADAPTER:-local}
       CICD_ADAPTER: ${CICD_ADAPTER:-mock}
-      GITHUB_ORG: ${GITHUB_ORG:-apollo}
-      GITLAB_URL: ${GITLAB_URL}
       MODEL: ${MODEL:-claude-haiku-4-5-20251001}
       MAX_REACT_ITERATIONS: ${MAX_REACT_ITERATIONS:-20}
+      APOLLO_SECRETS_KEY: ${APOLLO_SECRETS_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -147,16 +147,16 @@ services:
       - rca-net
     restart: unless-stopped
 
-  # ── Datadog Agent — ships the shared log file to Datadog ────────────────────
-  # Config is mounted at /etc/datadog-agent/conf.d (the agent's real conf path).
-  # DD_API_KEY and DD_SITE are read from .env via env_file.
-  # DD_LOGS_INJECTION=true on each app container embeds dd.service=<name> in
-  # every log line so Datadog attributes each log to the correct service.
+  # ── Datadog Agent — ships the banking-app logs to Datadog ───────────────────
+  # This sidecar belongs to the banking demo stack — it forwards the shared
+  # app-logs volume to Datadog so incidents appear in your Datadog account.
+  #
+  # DD_API_KEY / DD_SITE come from .env (banking infra config, not Apollo creds).
+  # Leave blank in .env if you don't use Datadog — the rest of the stack starts fine.
   dd-agent:
     image: gcr.io/datadoghq/agent:7
-    env_file: .env
     environment:
-      DD_API_KEY: ${DD_API_KEY}
+      DD_API_KEY: ${DD_API_KEY:-}
       DD_SITE: ${DD_SITE:-us5.datadoghq.com}
       DD_LOGS_ENABLED: "true"
       DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "false"

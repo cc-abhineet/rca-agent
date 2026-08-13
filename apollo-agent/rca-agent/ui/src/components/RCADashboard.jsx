@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { fetchLogs, fetchStats } from '../api/client'
-import { clearStreamCache } from './RCAStreamPanel'
-import { useApp } from '../context/AppContext'
 
 // ── Helpers ───────────────────────────────────────────────────
 function relTime(ts) {
@@ -207,6 +206,14 @@ function IncidentCard({ log, onAction, loading }) {
           )}
           {isDone && (
             <ActionBtn
+              label="💬 Chat"
+              color="#A78BFA" dimColor="rgba(139,92,246,0.12)" borderColor="rgba(139,92,246,0.35)"
+              hoverColor="rgba(139,92,246,0.25)"
+              onClick={() => onAction('stream', log)}
+            />
+          )}
+          {isDone && (
+            <ActionBtn
               label="📊 Report"
               color="#34D399" dimColor="rgba(16,185,129,0.1)" borderColor="rgba(16,185,129,0.3)"
               hoverColor="rgba(16,185,129,0.22)"
@@ -289,7 +296,7 @@ const FILTERS = [
 
 // ── Main dashboard ────────────────────────────────────────────
 export default function RCADashboard() {
-  const { openStream } = useApp()
+  const navigate = useNavigate()
   const [logs,        setLogs]        = useState([])
   const [stats,       setStats]       = useState({})
   const [loading,     setLoading]     = useState(true)
@@ -317,25 +324,15 @@ export default function RCADashboard() {
   }, [load])
 
   const handleAction = useCallback(async (action, log) => {
-    if (action === 'stream') {
-      openStream(log.id, log.service_name, log.error_type)
+    if (action === 'stream' || action === 'run') {
+      navigate(`/workspace/${log.id}`)
       return
     }
     if (action === 'report') {
       const reportId = log.duplicate_of || log.id
       window.open(`/rca/${reportId}/report`, '_blank')
-      return
     }
-    if (action === 'run') {
-      // Clear any stale cache for this incident so the panel always starts fresh,
-      // whether this is a first run or a re-run of a completed/failed incident.
-      clearStreamCache(log.id)
-      // Open the SSE stream immediately — the stream endpoint starts the agent thread.
-      // Do NOT await a synchronous trigger call; that would block the UI for the full
-      // RCA duration (~2 min) before the panel opens.
-      openStream(log.id, log.service_name, log.error_type)
-    }
-  }, [openStream, load])
+  }, [navigate, load])
 
   // Filter + search
   const visible = logs.filter(log => {

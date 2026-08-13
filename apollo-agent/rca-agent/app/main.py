@@ -15,7 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from rca_agent.config import settings
-from rca_agent.db import execute, execute_one, json_loads, get_conn, create_token_usage_table
+from rca_agent.db import execute, execute_one, json_loads, get_conn, create_token_usage_table, create_org_tables
+from rca_agent.secrets import encrypt_config, decrypt_config, mask_config, get_key
 from app.auth import (
     create_users_table, create_user, get_user_by_username,
     verify_password, create_token, decode_token, touch_last_login,
@@ -102,33 +103,91 @@ def _get_overlay(key: str, default=None):
     return _settings_overlay.get(key, default)
 
 
-def _effective_agent_settings() -> dict:
+def _load_org_settings(org_id: str, user_id: int) -> dict:
+    """Load and decrypt all integration credentials for an org from DB.
+
+    Returns a flat dict merging all integration config_json blobs, with
+    secret fields decrypted and ready for agent use.
+    """
+    rows = execute(
+        "SELECT integration_type, config_json FROM org_integrations WHERE org_id=%s AND user_id=%s AND is_connected=1",
+        (org_id, user_id),
+    )
+    merged: dict = {}
+    for row in (rows or []):
+        try:
+            cfg = json_loads(row["config_json"]) if isinstance(row["config_json"], str) else row["config_json"]
+            merged.update(decrypt_config(cfg or {}))
+        except Exception:
+            pass
+    return merged
+
+
+def _effective_agent_settings(org_id: Optional[str] = None, user_id: Optional[int] = None) -> dict:
     """Return the runtime-effective values that must be passed to agent.run().
-    Merges the user's Settings-UI overlay on top of env defaults."""
+
+    Priority (highest first):
+      1. Org-specific credentials from org_integrations table (decrypted)
+      2. Global settings overlay (apollo_settings.json)
+      3. Env-var defaults (settings.*)
+    """
     raw_iters = _get_overlay("max_react_iterations") or settings.max_react_iterations
     try:
         max_iters = int(raw_iters)
     except (TypeError, ValueError):
         logger.warning("Invalid max_react_iterations value %r — using env default", raw_iters)
         max_iters = settings.max_react_iterations
-    return {
+
+    # Start with env defaults + global overlay
+    result = {
         "api_key":        _get_overlay("anthropic_api_key") or settings.anthropic_api_key,
         "model":          _get_overlay("model")             or settings.model,
         "max_iterations": max_iters,
     }
 
+    # Layer org credentials on top when an org is selected
+    if org_id and user_id:
+        try:
+            org_cfg = _load_org_settings(org_id, user_id)
+            # Map org config fields → agent kwarg names
+            field_map = {
+                "anthropic_api_key": "api_key",
+                "model":             "model",
+                "max_iterations":    "max_iterations",
+            }
+            for cfg_key, agent_key in field_map.items():
+                val = org_cfg.get(cfg_key)
+                if val:
+                    result[agent_key] = val
+            # Also make the full org config available for tool adapters
+            result["_org_config"] = org_cfg
+        except Exception as exc:
+            logger.warning("Could not load org settings for %s: %s", org_id, exc)
+
+    return result
+
 
 _load_settings_overlay()
+
+# Warm up the secrets encryption key early to surface config errors at startup
+try:
+    get_key()
+except Exception as _e:
+    logger.error("Failed to load secrets key: %s", _e)
 
 # Ensure token_usage and users tables exist at startup (idempotent)
 try:
     create_token_usage_table()
-except Exception:
-    pass
+except Exception as _e:
+    logger.error("create_token_usage_table failed: %s", _e)
+try:
+    create_org_tables()
+except Exception as _e:
+    logger.error("create_org_tables failed: %s", _e)
 try:
     create_users_table()
-except Exception:
-    pass
+except Exception as _e:
+    logger.error("create_users_table failed: %s", _e)
 
 app = FastAPI(
     title="rca-agent",
@@ -159,6 +218,9 @@ async def _auth_middleware(request: Request, call_next):
     if not any(path.startswith(p) for p in _PROTECTED):
         return await call_next(request)
     if any(path.startswith(e) for e in _EXEMPT):
+        return await call_next(request)
+    # HTML report pages are public-safe (read-only, no user secrets exposed)
+    if path.endswith("/report"):
         return await call_next(request)
 
     # Extract token from header or query param
@@ -220,6 +282,229 @@ def auth_me(request: Request):
     return {"username": payload["username"]}
 
 
+# ── Organisation endpoints ────────────────────────────────────────────────────
+
+def _get_user_id(request: Request) -> int:
+    """Extract user_id from the JWT in the Authorization header (stored as 'sub')."""
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else request.query_params.get("token", "")
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(401, "Not authenticated")
+    return int(payload.get("sub") or payload.get("user_id", 0))
+
+
+class _OrgBody(BaseModel):
+    name: str
+    environment: str = "production"
+
+
+@app.get("/api/orgs")
+def list_orgs(request: Request):
+    uid = _get_user_id(request)
+    rows = execute("SELECT * FROM organisations WHERE owner_user_id=%s ORDER BY created_at DESC", (uid,))
+    return rows
+
+
+@app.post("/api/orgs")
+async def create_org_endpoint(request: Request, body: _OrgBody):
+    import uuid as _uuid
+    import secrets as _secrets
+    uid = _get_user_id(request)
+    org_id = str(_uuid.uuid4())
+    ingest_key = _secrets.token_hex(32)
+    execute(
+        "INSERT INTO organisations (id, owner_user_id, name, environment, ingest_api_key) VALUES (%s,%s,%s,%s,%s)",
+        (org_id, uid, body.name.strip(), body.environment, ingest_key),
+    )
+    # Track this as the active org for the ingestion agent — no manual key paste needed
+    execute(
+        "INSERT INTO agent_config (config_key, config_value) VALUES ('active_ingest_org_id', %s) "
+        "ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)",
+        (org_id,),
+    )
+    # Claim any incidents that arrived before an org existed (org_id = NULL)
+    execute("UPDATE error_logs SET org_id = %s WHERE org_id IS NULL", (org_id,))
+    # Immediately notify the ingestion agent so its in-memory _org_id updates now,
+    # not after the 30-second background retry loop fires.
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            await client.post("http://ingestion-agent:8001/org", json={"org_id": org_id})
+    except Exception:
+        pass  # agent not reachable in local dev — DB write above is the fallback
+    row = execute_one("SELECT * FROM organisations WHERE id=%s", (org_id,))
+    return row or {"id": org_id, "name": body.name, "environment": body.environment, "ingest_api_key": ingest_key}
+
+
+@app.get("/api/orgs/{org_id}/ingest-key")
+def get_ingest_key(org_id: str, request: Request):
+    """Return the ingest API key for an org (owner only)."""
+    uid = _get_user_id(request)
+    row = execute_one(
+        "SELECT ingest_api_key FROM organisations WHERE id=%s AND owner_user_id=%s",
+        (org_id, uid),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Org not found")
+    return {"ingest_api_key": row.get("ingest_api_key") or ""}
+
+
+@app.get("/api/ingest/config")
+def ingest_config_for_agent(request: Request):
+    """Called by the ingestion agent with X-Apollo-Ingest-Key to retrieve its org config."""
+    api_key = request.headers.get("X-Apollo-Ingest-Key", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing X-Apollo-Ingest-Key header")
+    row = execute_one("SELECT id FROM organisations WHERE ingest_api_key=%s", (api_key,))
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid ingest API key")
+    org_id = row["id"]
+    cfg_row = execute_one(
+        "SELECT config_json FROM org_integrations WHERE org_id=%s AND integration_type='ingestion'",
+        (org_id,),
+    )
+    config: dict = {}
+    if cfg_row and cfg_row.get("config_json"):
+        try:
+            raw = json_loads(cfg_row["config_json"]) if isinstance(cfg_row["config_json"], str) else (cfg_row["config_json"] or {})
+            config = decrypt_config(raw)
+        except Exception:
+            pass
+    return {
+        "org_id":         org_id,
+        "service_name":   config.get("service_name", ""),
+        "log_file_paths": config.get("log_file_paths", ""),
+        "environment":    config.get("environment", "production"),
+        "mode":           config.get("mode", "db"),
+    }
+
+
+@app.post("/api/orgs/{org_id}/activate")
+async def activate_org(org_id: str, request: Request):
+    """
+    Switch the active org for this session. Notifies the ingestion agent so new
+    incidents are tagged to the correct org immediately — no container restart needed.
+    """
+    uid = _get_user_id(request)
+    org = execute_one(
+        "SELECT id, name, environment FROM organisations WHERE id=%s AND owner_user_id=%s",
+        (org_id, uid),
+    )
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Persist active org to agent_config so ingestion agent picks it up automatically
+    execute(
+        "INSERT INTO agent_config (config_key, config_value) VALUES ('active_ingest_org_id', %s) "
+        "ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)",
+        (org_id,),
+    )
+    # Claim unscoped incidents (org_id = NULL) into this org so they appear immediately
+    execute("UPDATE error_logs SET org_id = %s WHERE org_id IS NULL", (org_id,))
+
+    # Also propagate this org's ingestion credentials to agent_config (plain-text bus
+    # the ingestion agent reads directly, bypassing the Fernet key it doesn't have).
+    ingest_row = execute_one(
+        "SELECT config_json FROM org_integrations WHERE org_id=%s AND integration_type='ingestion'",
+        (org_id,),
+    )
+    if ingest_row and ingest_row.get("config_json"):
+        try:
+            raw = json_loads(ingest_row["config_json"]) if isinstance(ingest_row["config_json"], str) else (ingest_row["config_json"] or {})
+            ingest_cfg = decrypt_config(raw)
+            execute(
+                "INSERT INTO agent_config (config_key, config_value) VALUES ('active_ingest_config', %s) "
+                "ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)",
+                (json.dumps(ingest_cfg),),
+            )
+        except Exception:
+            pass
+
+    # Also tell the running ingestion agent immediately (best-effort)
+    ingestion_ok = False
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                "http://ingestion-agent:8001/org",
+                json={"org_id": org_id},
+            )
+            ingestion_ok = resp.status_code == 200
+    except Exception:
+        pass  # ingestion-agent not reachable in local dev — not a failure
+
+    return {
+        "org_id":       org_id,
+        "name":         org["name"],
+        "environment":  org.get("environment", "production"),
+        "ingestion_ok": ingestion_ok,
+    }
+
+
+@app.delete("/api/orgs/{org_id}")
+def delete_org(org_id: str, request: Request):
+    uid = _get_user_id(request)
+    execute("DELETE FROM organisations WHERE id=%s AND owner_user_id=%s", (org_id, uid))
+    return {"deleted": org_id}
+
+
+@app.get("/api/orgs/{org_id}/integrations")
+def get_org_integrations(org_id: str, request: Request):
+    """Return integration status for an org. Secret values are masked for the UI."""
+    uid = _get_user_id(request)
+    rows = execute(
+        "SELECT integration_type, is_connected, updated_at, config_json FROM org_integrations WHERE org_id=%s AND user_id=%s",
+        (org_id, uid),
+    )
+    result = []
+    for row in (rows or []):
+        try:
+            cfg = json_loads(row["config_json"]) if isinstance(row["config_json"], str) else (row["config_json"] or {})
+            decrypted = decrypt_config(cfg)
+            masked    = mask_config(decrypted)
+        except Exception:
+            masked = {}
+        result.append({
+            "integration_type": row["integration_type"],
+            "is_connected":     bool(row.get("is_connected")),
+            "updated_at":       str(row.get("updated_at") or ""),
+            "config":           masked,
+        })
+    return result
+
+
+class _OrgIntegrationBody(BaseModel):
+    config: dict = {}
+
+
+@app.put("/api/orgs/{org_id}/integrations/{integration_type}")
+def save_org_integration(org_id: str, integration_type: str, request: Request, body: _OrgIntegrationBody):
+    """Save integration credentials for an org. Secret fields are Fernet-encrypted before storage."""
+    import uuid as _uuid
+    uid = _get_user_id(request)
+
+    # Encrypt secret fields before persisting
+    encrypted_cfg = encrypt_config(body.config)
+    config_json   = json.dumps(encrypted_cfg)
+
+    execute(
+        """INSERT INTO org_integrations (id, org_id, user_id, integration_type, config_json, is_connected)
+           VALUES (%s,%s,%s,%s,%s,1)
+           ON DUPLICATE KEY UPDATE config_json=%s, is_connected=1, updated_at=NOW()""",
+        (str(_uuid.uuid4()), org_id, uid, integration_type, config_json, config_json),
+    )
+
+    # For ingestion credentials: also write plain-text to agent_config so the ingestion
+    # agent (which has no access to the Fernet key) can read them directly from the DB.
+    if integration_type == 'ingestion':
+        execute(
+            "INSERT INTO agent_config (config_key, config_value) VALUES ('active_ingest_config', %s) "
+            "ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)",
+            (json.dumps(body.config),),
+        )
+
+    return {"org_id": org_id, "integration_type": integration_type, "saved": True}
+
+
 @app.get("/health")
 def health():
     return {
@@ -235,16 +520,21 @@ def health():
 
 class RunRCARequest(BaseModel):
     error_log_id: str
+    org_id: Optional[str] = None
 
 
 @app.post("/rca/run")
-def run_rca(req: RunRCARequest):
+def run_rca(req: RunRCARequest, request: Request):
+    uid = _get_user_id(request)
     execute(
         "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
         (req.error_log_id,),
     )
     try:
-        report = agent.run(req.error_log_id, **_effective_agent_settings())
+        eff = _effective_agent_settings(req.org_id, uid)
+        if not eff.get('api_key'):
+            raise ValueError("No Claude API key configured. Add your Anthropic API key in Integrations → GitHub / GitLab.")
+        report = agent.run(req.error_log_id, api_key=eff['api_key'], model=eff['model'], max_iterations=eff['max_iterations'])
         execute(
             """UPDATE error_logs
                SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
@@ -264,15 +554,17 @@ def run_rca(req: RunRCARequest):
 
 class StreamRCARequest(BaseModel):
     error_log_id: str
+    org_id: Optional[str] = None
 
 
 @app.post("/rca/run/stream")
-def run_rca_stream(req: StreamRCARequest):
+def run_rca_stream(req: StreamRCARequest, request: Request):
     """
     Run the RCA agent and stream trace events as Server-Sent Events.
     Each event is: data: <json>\\n\\n
     On completion: data: {"type": "done", "report": <full_rca_json>}\\n\\n
     """
+    uid = _get_user_id(request)
     event_queue: queue.Queue = queue.Queue()
 
     def trace_callback(event: dict) -> None:
@@ -284,8 +576,13 @@ def run_rca_stream(req: StreamRCARequest):
                 "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
                 (req.error_log_id,),
             )
-            eff = _effective_agent_settings()
-            report = agent.run(req.error_log_id, trace_callback=trace_callback, **eff)
+            eff = _effective_agent_settings(req.org_id, uid)
+            if not eff.get('api_key'):
+                raise ValueError(
+                    "No Claude API key configured for this organization. "
+                    "Go to Integrations → GitHub / GitLab and add your Anthropic API key."
+                )
+            report = agent.run(req.error_log_id, trace_callback=trace_callback, api_key=eff['api_key'], model=eff['model'], max_iterations=eff['max_iterations'])
             execute(
                 """UPDATE error_logs
                    SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
@@ -425,10 +722,12 @@ def demo_errors():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/api/stats")
-def api_stats():
-    """Aggregate counts for the Apollo dashboard stats bar."""
+def api_stats(org_id: Optional[str] = Query(None)):
+    """Aggregate counts for the Apollo dashboard stats bar, scoped to an org."""
+    where  = "WHERE org_id = %s" if org_id else ""
+    params = [org_id] if org_id else None
     rows = execute(
-        """SELECT
+        f"""SELECT
                COUNT(*) AS total,
                SUM(rca_status = 'pending')     AS pending,
                SUM(rca_status = 'in_progress') AS in_progress,
@@ -438,7 +737,8 @@ def api_stats():
                SUM(LOWER(COALESCE(severity, risk_level, '')) = 'high')     AS high,
                SUM(LOWER(COALESCE(severity, risk_level, '')) = 'medium')   AS medium,
                SUM(LOWER(COALESCE(severity, risk_level, '')) = 'low')      AS low
-           FROM error_logs"""
+           FROM error_logs {where}""",
+        params,
     )
     if not rows:
         return {"total": 0, "pending": 0, "in_progress": 0, "completed": 0,
@@ -455,10 +755,14 @@ def api_logs(
     severity: str = Query(""),
     risk_level: str = Query(""),
     status: str = Query(""),
+    org_id: Optional[str] = Query(None),
 ):
-    """Paginated error_logs with optional filters."""
+    """Paginated error_logs with optional filters, scoped to an org."""
     conditions = []
     params = []
+    if org_id:
+        conditions.append("org_id = %s")
+        params.append(org_id)
     if service:
         conditions.append("service_name = %s")
         params.append(service)
@@ -634,10 +938,11 @@ def api_post_settings(body: SettingsUpdate):
 # ── Credential validation ─────────────────────────────────────────────────────
 
 class CredentialTestRequest(BaseModel):
-    key_type: str           # 'anthropic' | 'github' | 'datadog'
+    key_type: str           # 'anthropic' | 'github' | 'datadog' | 'gitlab'
     api_key:  Optional[str] = None   # key to test; falls back to current effective value
     app_key:  Optional[str] = None   # Datadog app key
     org:      Optional[str] = None   # GitHub org (for context, not validated)
+    base_url: Optional[str] = None   # GitLab base URL
 
 
 @app.post("/api/settings/test")
@@ -728,6 +1033,21 @@ async def api_test_credential(body: CredentialTestRequest):
                 return {"valid": False, "message": f"Datadog returned HTTP {resp.status_code}. Check your site setting ({dd_site})."}
         except Exception as e:
             return {"valid": False, "message": f"Could not reach Datadog ({dd_site}): {e}"}
+
+    # ── GitLab ───────────────────────────────────────────────────────────────
+    elif key_type == "gitlab":
+        import gitlab as _gl_mod
+        token    = body.api_key
+        base_url = body.base_url or "https://gitlab.com"
+        if not token:
+            return {"valid": False, "message": "No GitLab token provided."}
+        try:
+            gl = _gl_mod.Gitlab(base_url, private_token=token)
+            gl.auth()
+            user = gl.users.get(gl.user.id)
+            return {"valid": True, "message": f"GitLab token valid — authenticated as @{user.username} ✓"}
+        except Exception as e:
+            return {"valid": False, "message": f"GitLab auth failed: {str(e)[:120]}"}
 
     return {"valid": False, "message": f"Unknown key_type: {key_type}"}
 
@@ -879,17 +1199,22 @@ def api_cancel_rca(error_log_id: str):
 
 class TriggerRCARequest(BaseModel):
     error_log_id: str
+    org_id: Optional[str] = None
 
 
 @app.post("/api/rca/trigger")
-def api_trigger_rca(req: TriggerRCARequest):
+def api_trigger_rca(req: TriggerRCARequest, request: Request):
     """Alias for /rca/run — returns {job_id, status}."""
+    uid = _get_user_id(request)
     execute(
         "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
         (req.error_log_id,),
     )
     try:
-        report = agent.run(req.error_log_id, **_effective_agent_settings())
+        eff = _effective_agent_settings(req.org_id, uid)
+        if not eff.get('api_key'):
+            raise ValueError("No Claude API key configured. Add your Anthropic API key in Integrations → GitHub / GitLab.")
+        report = agent.run(req.error_log_id, api_key=eff['api_key'], model=eff['model'], max_iterations=eff['max_iterations'])
         execute(
             """UPDATE error_logs
                SET rca_status='completed', rca_completed_at=NOW(), rca_result=%s
@@ -906,13 +1231,19 @@ def api_trigger_rca(req: TriggerRCARequest):
 
 
 @app.get("/api/rca/stream/{error_log_id}")
-def api_rca_stream(error_log_id: str):
+def api_rca_stream(
+    error_log_id: str,
+    request: Request,
+    org_id: Optional[str] = Query(default=None),
+):
     """
     SSE stream — GET version for EventSource compatibility.
 
     Uses a pub-sub model so reconnecting browsers subscribe to the SAME
     running agent instead of starting a duplicate agent thread.
+    Pass org_id as a query param to load that org's credentials.
     """
+    uid = _get_user_id(request)
     sub_queue: queue.Queue = queue.Queue(maxsize=512)
 
     with _active_jobs_lock:
@@ -932,10 +1263,18 @@ def api_rca_stream(error_log_id: str):
                     "UPDATE error_logs SET rca_status='in_progress', rca_started_at=NOW() WHERE id=%s",
                     (error_log_id,),
                 )
+                eff = _effective_agent_settings(org_id, uid)
+                if not eff.get('api_key'):
+                    raise ValueError(
+                        "No Claude API key configured for this organization. "
+                        "Go to Integrations → GitHub / GitLab and add your Anthropic API key."
+                    )
                 report = agent.run(
                     error_log_id,
                     trace_callback=lambda ev: _job_broadcast(error_log_id, ev),
-                    **_effective_agent_settings(),
+                    api_key=eff['api_key'],
+                    model=eff['model'],
+                    max_iterations=eff['max_iterations'],
                 )
                 execute(
                     """UPDATE error_logs
@@ -990,6 +1329,40 @@ def api_rca_stream(error_log_id: str):
 
     return StreamingResponse(
         sse_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── RCA Chat ─────────────────────────────────────────────────────────────────
+
+class _ChatBody(BaseModel):
+    messages: list[dict]
+    org_id: Optional[str] = None
+
+
+@app.post("/api/chat/{error_log_id}")
+def api_chat(error_log_id: str, body: _ChatBody, request: Request):
+    """
+    Stream a Claude chat response about a specific RCA incident.
+    Body: { messages: [{role: 'user'|'assistant', content: str}, ...], org_id?: str }
+    Returns an SSE stream of: chunk | tool_call | tool_result | done | error
+    """
+    from app.chat_agent import stream_rca_chat
+
+    uid = _get_user_id(request)
+    s   = _effective_agent_settings(body.org_id, uid)
+
+    def _gen():
+        yield from stream_rca_chat(
+            error_log_id=error_log_id,
+            messages=body.messages,
+            api_key=s["api_key"],
+            model=s["model"],
+        )
+
+    return StreamingResponse(
+        _gen(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

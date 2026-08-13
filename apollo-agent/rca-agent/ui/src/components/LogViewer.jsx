@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { fetchLogs, cancelRCA } from '../api/client'
 import { useApp } from '../context/AppContext'
 
@@ -153,13 +154,22 @@ function LogCard({ log, onRunRCA, onCancel }) {
               </button>
             )}
             {log.rca_status === 'completed' && (
-              <button
-                className="btn btn-secondary"
-                style={{ fontSize: 12, padding: '4px 10px' }}
-                onClick={() => window.open(`/rca/${log.id}/report`, '_blank')}
-              >
-                View Report
-              </button>
+              <>
+                <button
+                  className="btn btn-primary"
+                  style={{ fontSize: 12, padding: '4px 10px', background: 'rgba(139,92,246,0.18)', borderColor: 'rgba(139,92,246,0.45)', color: '#C4B5FD' }}
+                  onClick={() => onRunRCA(log.id)}
+                >
+                  💬 Chat
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => window.open(`/rca/${log.id}/report`, '_blank')}
+                >
+                  View Report
+                </button>
+              </>
             )}
             <button
               className="btn btn-secondary"
@@ -233,7 +243,8 @@ function RefreshIcon({ spinning }) {
 const RISK_FILTERS = ['All', 'Critical', 'High', 'Medium', 'Low']
 
 export default function LogViewer() {
-  const { openStream, showToast } = useApp()
+  const navigate = useNavigate()
+  const { showToast } = useApp()  // showToast used by handleCancel
   const loadLogsRef = useRef(null)  // allows handleCancel to call loadLogs without stale closure
 
   const handleCancel = useCallback(async (id) => {
@@ -428,7 +439,7 @@ export default function LogViewer() {
       ) : (
         <div className="log-list">
           {filtered.map(log => (
-            <LogCard key={log.id} log={log} onRunRCA={openStream} onCancel={handleCancel} />
+            <LogCard key={log.id} log={log} onRunRCA={(id) => navigate(`/workspace/${id}`)} onCancel={handleCancel} />
           ))}
         </div>
       )}

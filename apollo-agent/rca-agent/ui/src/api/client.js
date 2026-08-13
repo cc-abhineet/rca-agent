@@ -46,11 +46,15 @@ export const authRegister = (username, password) =>
 export const fetchHealth = () => request('/health')
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
-export const fetchStats = () => request('/api/stats')
+export const fetchStats = (orgId = null) => {
+  const q = orgId ? `?org_id=${encodeURIComponent(orgId)}` : ''
+  return request(`/api/stats${q}`)
+}
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
 export const fetchLogs = (params = {}) => {
   const q = new URLSearchParams()
+  if (params.org_id)     q.set('org_id', params.org_id)
   if (params.page)       q.set('page', params.page)
   if (params.limit)      q.set('limit', params.limit)
   if (params.service)    q.set('service', params.service)
@@ -90,8 +94,8 @@ export const cancelRCA   = (error_log_id) =>
   request(`/api/rca/cancel/${error_log_id}`, { method: 'POST' })
 export const testCredential = (body) =>
   request('/api/settings/test', { method: 'POST', body: JSON.stringify(body) })
-export const triggerRCA  = (error_log_id) =>
-  request('/api/rca/trigger', { method: 'POST', body: JSON.stringify({ error_log_id }) })
+export const triggerRCA  = (error_log_id, org_id = null) =>
+  request('/api/rca/trigger', { method: 'POST', body: JSON.stringify({ error_log_id, ...(org_id ? { org_id } : {}) }) })
 export const runRCA      = (error_log_id) =>
   request('/rca/run', { method: 'POST', body: JSON.stringify({ error_log_id }) })
 
@@ -103,13 +107,74 @@ export const getRCAReport = (id) => {
 
 // ── SSE stream ────────────────────────────────────────────────────────────────
 // EventSource doesn't support custom headers, so the token goes in the query string.
-export function streamRCA(error_log_id, onEvent, onError) {
+export function streamRCA(error_log_id, onEvent, onError, org_id = null) {
   const token = getToken()
-  const url   = token
-    ? `/api/rca/stream/${error_log_id}?token=${encodeURIComponent(token)}`
-    : `/api/rca/stream/${error_log_id}`
-  const es = new EventSource(url)
+  const params = new URLSearchParams()
+  if (token)  params.set('token', token)
+  if (org_id) params.set('org_id', org_id)
+  const qs  = params.toString()
+  const url = `/api/rca/stream/${error_log_id}${qs ? '?' + qs : ''}`
+  const es  = new EventSource(url)
   es.onmessage = (e) => { try { onEvent(JSON.parse(e.data)) } catch {} }
   es.onerror   = (e) => { onError(e); es.close() }
   return () => es.close()
+}
+
+// ── Org / integration endpoints ──────────────────────────────────────────────
+export const fetchOrgs         = ()               => request('/api/orgs')
+export const createOrg         = (body)           => request('/api/orgs', { method: 'POST', body: JSON.stringify(body) })
+export const deleteOrg         = (id)             => request(`/api/orgs/${id}`, { method: 'DELETE' })
+export const activateOrg       = (orgId)          => request(`/api/orgs/${orgId}/activate`, { method: 'POST' })
+export const fetchOrgIntegrations = (orgId)       => request(`/api/orgs/${orgId}/integrations`)
+export const saveOrgIntegration   = (orgId, type, config) =>
+  request(`/api/orgs/${orgId}/integrations/${type}`, { method: 'PUT', body: JSON.stringify({ config }) })
+export const fetchIngestKey    = (orgId)          => request(`/api/orgs/${orgId}/ingest-key`)
+
+// ── Chat stream ────────────────────────────────────────────────────────────────
+// POST-based SSE for follow-up chat (EventSource doesn't support POST).
+// Returns a cancel function.
+export function streamChat(error_log_id, messages, { onChunk, onToolCall, onToolResult, onDone, onError }, org_id = null) {
+  const token = getToken()
+  const ctrl  = new AbortController()
+
+  fetch(`/api/chat/${error_log_id}`, {
+    method: 'POST',
+    signal: ctrl.signal,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ messages, ...(org_id ? { org_id } : {}) }),
+  })
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const reader  = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+
+      function read() {
+        reader.read().then(({ done, value }) => {
+          if (done) { onDone?.(); return }
+          buf += decoder.decode(value, { stream: true })
+          const parts = buf.split('\n')
+          buf = parts.pop() ?? ''
+          for (const line of parts) {
+            if (!line.startsWith('data: ')) continue
+            try {
+              const ev = JSON.parse(line.slice(6))
+              if (ev.type === 'chunk')       onChunk?.(ev.text)
+              else if (ev.type === 'tool_call')   onToolCall?.(ev)
+              else if (ev.type === 'tool_result') onToolResult?.(ev)
+              else if (ev.type === 'done')   { onDone?.(); return }
+              else if (ev.type === 'error')  { onError?.(ev.message); return }
+            } catch {}
+          }
+          read()
+        }).catch(err => { if (!ctrl.signal.aborted) onError?.(String(err)) })
+      }
+      read()
+    })
+    .catch(err => { if (!ctrl.signal.aborted) onError?.(String(err)) })
+
+  return () => ctrl.abort()
 }

@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#F6F7F9;font-family:'Geist','Geist Fallback',system-ui,-apple-system,'Segoe UI',sans-serif;color:#16181D;-webkit-font-smoothing:antialiased;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#D4D7DC;border-radius:9px;border:2px solid #F6F7F9;}
+  ::-webkit-scrollbar-thumb:hover{background:#BCC0C7;}
+  @keyframes ap-pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.45;transform:scale(.82);}}
+  @keyframes ap-ring{0%{box-shadow:0 0 0 0 rgba(229,72,77,.32);}70%{box-shadow:0 0 0 7px rgba(229,72,77,0);}100%{box-shadow:0 0 0 0 rgba(229,72,77,0);}}
+  @keyframes ap-shimmer{0%{background-position:-160px 0;}100%{background-position:220px 0;}}
+  @keyframes ap-spin{to{transform:rotate(360deg);}}
+  @keyframes ap-rise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  .ap-mono{font-family:'Geist Mono',ui-monospace,'SF Mono',Menlo,monospace;}
+  .ap-nav:hover{background:#F0F1F4 !important;}
+  .ap-row:hover{background:#FAFAFB !important;}
+  .ap-btn:hover{filter:brightness(.96);}
+  .ap-ghost:hover{background:#F0F1F4 !important;}
+  .ap-card-run{background-image:linear-gradient(100deg,transparent 30%,rgba(91,91,214,.06) 50%,transparent 70%);background-size:240px 100%;animation:ap-shimmer 1.6s linear infinite;}
+  textarea.ap-input::placeholder{color:#9197A1;}
+  textarea.ap-input:focus{outline:none;border-color:#C3C2F2 !important;box-shadow:0 0 0 3px rgba(91,91,214,.10);}
+  .ap-calm *,.ap-calm *::before,.ap-calm *::after{animation:none !important;}
+</style>
+</helmet>
+
+<div class="{{ rootClass }}" style="display:flex;height:100vh;width:100%;overflow:hidden;background:#F6F7F9;--ap-accent:{{ accent }};--ap-accent-deep:{{ accentDeep }};--ap-accent-tint:{{ accentTint }};--ap-accent-grad:{{ accentGrad }};">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside style="width:228px;flex:none;background:#FFFFFF;border-right:1px solid #E6E8EB;display:flex;flex-direction:column;">
+    <!-- org switcher -->
+    <div style="padding:14px 14px 10px;position:relative;">
+      <button onClick="{{ toggleOrg }}" class="ap-nav" style="width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:transparent;border:1px solid transparent;cursor:pointer;text-align:left;">
+        <span style="width:28px;height:28px;flex:none;border-radius:8px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;">A</span>
+        <span style="flex:1;min-width:0;">
+          <span style="display:block;font-size:13px;font-weight:600;color:#16181D;line-height:1.2;">{{ org }}</span>
+          <span style="display:block;font-size:11px;color:#9197A1;line-height:1.3;">prod · 14 services</span>
+        </span>
+        <span style="color:#9197A1;font-size:10px;">▾</span>
+      </button>
+      <sc-if value="{{ orgOpen }}">
+        <div style="position:absolute;left:14px;right:14px;top:54px;z-index:30;background:#fff;border:1px solid #E6E8EB;border-radius:11px;box-shadow:0 12px 32px rgba(16,18,29,.12);padding:6px;">
+          <div style="padding:6px 10px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9197A1;">Organizations</div>
+          <button class="ap-nav" style="width:100%;display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:var(--ap-accent-tint,#EEEEFB);border:none;cursor:pointer;text-align:left;">
+            <span style="width:22px;height:22px;border-radius:6px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;">A</span>
+            <span style="flex:1;font-size:13px;font-weight:600;">Acme Platform</span>
+            <span style="color:var(--ap-accent,#5B5BD6);font-size:13px;">✓</span>
+          </button>
+          <button class="ap-nav" style="width:100%;display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:transparent;border:none;cursor:pointer;text-align:left;">
+            <span style="width:22px;height:22px;border-radius:6px;background:#EAEBEE;display:flex;align-items:center;justify-content:center;color:#5B616E;font-weight:700;font-size:11px;">N</span>
+            <span style="flex:1;font-size:13px;font-weight:500;color:#16181D;">Northwind Labs</span>
+            <span style="font-size:11px;color:#9197A1;">staging</span>
+          </button>
+          <button class="ap-nav" style="width:100%;display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:transparent;border:none;cursor:pointer;text-align:left;">
+            <span style="width:22px;height:22px;border-radius:6px;background:#EAEBEE;display:flex;align-items:center;justify-content:center;color:#5B616E;font-weight:700;font-size:11px;">∑</span>
+            <span style="flex:1;font-size:13px;font-weight:500;color:#16181D;">All organizations</span>
+          </button>
+          <div style="height:1px;background:#EDEEF1;margin:6px 4px;"></div>
+          <button onClick="{{ startOrg }}" class="ap-nav" style="width:100%;display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:transparent;border:none;cursor:pointer;text-align:left;">
+            <span style="width:22px;height:22px;border-radius:6px;border:1.5px dashed #C3C2F2;display:flex;align-items:center;justify-content:center;color:var(--ap-accent,#5B5BD6);font-weight:700;font-size:14px;">+</span>
+            <span style="flex:1;font-size:13px;font-weight:600;color:var(--ap-accent,#5B5BD6);">Create organization</span>
+          </button>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- nav -->
+    <nav style="padding:4px 12px;display:flex;flex-direction:column;gap:2px;">
+      <button onClick="{{ goHome }}" class="ap-nav" style="{{ navHome }}">
+        <span style="width:16px;height:16px;flex:none;display:flex;align-items:flex-end;gap:2px;"><span style="width:4px;height:8px;border:1.6px solid currentColor;border-radius:1.5px;"></span><span style="width:4px;height:13px;border:1.6px solid currentColor;border-radius:1.5px;"></span><span style="width:4px;height:5px;border:1.6px solid currentColor;border-radius:1.5px;"></span></span>
+        <span style="flex:1;text-align:left;">Home</span>
+      </button>
+      <button onClick="{{ goIncidents }}" class="ap-nav" style="{{ navIncidents }}">
+        <span style="width:16px;height:16px;flex:none;border:1.6px solid currentColor;border-radius:4px;position:relative;"><span style="position:absolute;inset:3px 3px auto 3px;height:1.6px;background:currentColor;"></span><span style="position:absolute;left:3px;right:6px;top:7px;height:1.6px;background:currentColor;"></span></span>
+        <span style="flex:1;text-align:left;">Incidents</span>
+        <span style="font-size:11px;font-weight:600;color:#E5484D;background:#FCECEC;padding:1px 6px;border-radius:20px;">5</span>
+      </button>
+      <button onClick="{{ goWorkbench }}" class="ap-nav" style="{{ navWorkbench }}">
+        <span style="width:16px;height:16px;flex:none;position:relative;"><span style="position:absolute;inset:0;border:1.6px solid currentColor;border-radius:50%;"></span><span style="position:absolute;left:5.5px;top:5.5px;width:5px;height:5px;border-radius:50%;background:currentColor;"></span></span>
+        <span style="flex:1;text-align:left;">Investigations</span>
+        <span style="width:6px;height:6px;border-radius:50%;background:#E5484D;animation:ap-pulse 1.5s ease-in-out infinite;"></span>
+      </button>
+      <button onClick="{{ goIntegrations }}" class="ap-nav" style="{{ navIntegrations }}">
+        <span style="width:16px;height:16px;flex:none;position:relative;"><span style="position:absolute;left:0;top:2px;width:7px;height:7px;border:1.6px solid currentColor;border-radius:3px;"></span><span style="position:absolute;right:0;bottom:2px;width:7px;height:7px;border:1.6px solid currentColor;border-radius:3px;"></span><span style="position:absolute;left:6px;top:8px;width:5px;height:1.6px;background:currentColor;transform:rotate(45deg);"></span></span>
+        <span style="flex:1;text-align:left;">Integrations</span>
+        <span style="font-size:9px;font-weight:700;letter-spacing:.04em;color:#9197A1;background:#F0F1F4;padding:1px 6px;border-radius:20px;">ADMIN</span>
+      </button>
+      <div style="height:1px;background:#EDEEF1;margin:8px 6px;"></div>
+      <button class="ap-nav" style="display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:9px;background:transparent;border:none;cursor:pointer;font-size:13.5px;font-weight:500;color:#9197A1;font-family:inherit;">
+        <span style="width:16px;height:16px;flex:none;border:1.6px solid currentColor;border-radius:3px;"></span>
+        <span style="flex:1;text-align:left;">Reports</span>
+      </button>
+      <button class="ap-nav" style="display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:9px;background:transparent;border:none;cursor:pointer;font-size:13.5px;font-weight:500;color:#9197A1;font-family:inherit;">
+        <span style="width:16px;height:16px;flex:none;border:1.6px solid currentColor;border-radius:50%;"></span>
+        <span style="flex:1;text-align:left;">Eval Suite</span>
+      </button>
+    </nav>
+
+    <div style="flex:1;"></div>
+
+    <!-- user -->
+    <button onClick="{{ goProfile }}" class="ap-nav" style="padding:12px;border-top:1px solid #EDEEF1;border-left:none;border-right:none;border-bottom:none;border-radius:0;display:flex;align-items:center;gap:10px;background:transparent;cursor:pointer;text-align:left;width:100%;font-family:inherit;">
+      <span style="width:30px;height:30px;flex:none;border-radius:50%;background:#1F8A5B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">MC</span>
+      <span style="flex:1;min-width:0;">
+        <span style="display:block;font-size:13px;font-weight:600;line-height:1.2;color:#16181D;">Maya Chen</span>
+        <span style="display:block;font-size:11px;color:#9197A1;">{{ roleLabel }} · on-call</span>
+      </span>
+      <span style="color:#9197A1;font-size:13px;">›</span>
+    </button>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- ============ WORKBENCH (hero) ============ -->
+    <sc-if value="{{ isWorkbench }}" hint-placeholder-val="{{ true }}">
+    <section data-screen-label="Investigation Workbench" style="display:flex;flex-direction:column;height:100%;min-height:0;">
+
+      <!-- incident header -->
+      <header style="flex:none;background:#fff;border-bottom:1px solid #E6E8EB;padding:14px 22px;display:flex;align-items:center;gap:16px;">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:3px;">
+            <span class="ap-mono" style="font-size:11px;color:#9197A1;">INC-2043</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#E5484D;background:#FCECEC;padding:2px 8px;border-radius:20px;border:1px solid #F5C6C7;"><span style="width:6px;height:6px;border-radius:50%;background:#E5484D;"></span>Critical</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:{{ investChipFg }};background:{{ investChipBg }};padding:2px 8px;border-radius:20px;"><span style="width:6px;height:6px;border-radius:50%;background:{{ investChipFg }};animation:ap-pulse 1.4s ease-in-out infinite;"></span>{{ investChipText }}</span>
+          </div>
+          <h1 style="font-size:18px;font-weight:600;letter-spacing:-.01em;line-height:1.25;color:#16181D;">order-service throwing <span class="ap-mono" style="font-size:16px;background:#FCECEC;color:#C13438;padding:1px 6px;border-radius:5px;">NullPointerException</span> on checkout</h1>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:7px;font-size:12px;color:#5B616E;">
+            <span class="ap-mono" style="font-size:11px;background:#F0F1F4;padding:2px 7px;border-radius:5px;">order-service</span>
+            <span style="color:#C7CAD0;">→</span>
+            <span class="ap-mono" style="font-size:11px;background:#F0F1F4;padding:2px 7px;border-radius:5px;">pricing-service</span>
+            <span style="width:3px;height:3px;border-radius:50%;background:#C7CAD0;"></span>
+            <span>started 6m ago</span>
+            <span style="width:3px;height:3px;border-radius:50%;background:#C7CAD0;"></span>
+            <span>38 failures/min</span>
+          </div>
+        </div>
+        <!-- participants -->
+        <div style="display:flex;align-items:center;">
+          <span title="Apollo agent" style="width:30px;height:30px;border-radius:50%;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 0 0 1.5px #C3C2F2;">A</span>
+          <span title="Maya Chen" style="width:30px;height:30px;border-radius:50%;background:#1F8A5B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:2px solid #fff;margin-left:-9px;">MC</span>
+          <span title="Devin Park" style="width:30px;height:30px;border-radius:50%;background:#C2410C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:2px solid #fff;margin-left:-9px;">DP</span>
+          <span title="Sara Okafor (viewing)" style="width:30px;height:30px;border-radius:50%;background:#5B616E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:2px solid #fff;margin-left:-9px;">SO</span>
+          <button onClick="{{ openInvite }}" class="ap-ghost" style="width:30px;height:30px;border-radius:50%;background:#F0F1F4;border:1.5px dashed #C7CAD0;color:#5B616E;display:flex;align-items:center;justify-content:center;font-size:15px;margin-left:-9px;cursor:pointer;">+</button>
+        </div>
+        <div style="width:1px;height:30px;background:#E6E8EB;"></div>
+        <button class="ap-ghost" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-weight:500;color:#16181D;cursor:pointer;font-family:inherit;">Share</button>
+        <button class="ap-btn" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:#16181D;border:1px solid #16181D;font-size:13px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;">Resolve incident</button>
+      </header>
+
+      <!-- body: timeline + right panel -->
+      <div style="flex:1;min-height:0;display:flex;overflow:hidden;">
+
+        <!-- ===== center: investigation timeline ===== -->
+        <div style="flex:1.55;min-width:0;display:flex;flex-direction:column;border-right:1px solid #E6E8EB;">
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:22px 26px 8px;">
+            <div style="max-width:680px;margin:0 auto;">
+
+              <!-- phase chip -->
+              <div style="display:flex;align-items:center;gap:10px;margin:2px 0 18px;"><span class="ap-mono" style="font-size:10px;font-weight:600;letter-spacing:.06em;color:#9197A1;text-transform:uppercase;">Triage</span><span style="flex:1;height:1px;background:#EDEEF1;"></span></div>
+
+              <!-- agent reasoning -->
+              <div style="display:flex;gap:12px;margin-bottom:18px;">
+                <span style="width:26px;height:26px;flex:none;border-radius:7px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">A</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Apollo</span><span style="font-size:11px;color:#9197A1;">reasoning</span></div>
+                  <p style="font-size:13.5px;line-height:1.6;color:#3A3E46;">Error rate on <span class="ap-mono" style="font-size:12px;color:#5B616E;">order-service</span> jumped from 0 to 38 req/min at 14:02 UTC — every failure is a <span class="ap-mono" style="font-size:12px;color:#5B616E;">NullPointerException</span> in <span class="ap-mono" style="font-size:12px;color:#5B616E;">OrderService.calculateTotal</span>. I'll establish what changed and rule out infrastructure before reading code.</p>
+                </div>
+              </div>
+
+              <!-- tool call: datadog metric -->
+              <div style="display:flex;gap:12px;margin-bottom:14px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:1.5px;flex:1;background:#EDEEF1;"></span></span>
+                <div style="flex:1;min-width:0;border:1px solid #E6E8EB;border-radius:11px;overflow:hidden;background:#fff;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid #EDEEF1;">
+                    <span style="width:18px;height:18px;border-radius:5px;background:#7C5CFC;display:flex;align-items:center;justify-content:center;"><span style="width:7px;height:7px;border-radius:50%;background:#fff;"></span></span>
+                    <span style="font-size:12px;font-weight:600;color:#16181D;">Datadog</span>
+                    <span class="ap-mono" style="font-size:11.5px;color:#5B616E;">query_metrics · trace.error_rate{service:order-service}</span>
+                    <span style="flex:1;"></span>
+                    <span style="font-size:11px;color:#1F8A5B;font-weight:600;">✓ 0.4s</span>
+                  </div>
+                  <div style="padding:13px;display:flex;align-items:flex-end;gap:14px;">
+                    <div style="display:flex;align-items:flex-end;gap:3px;height:42px;">
+                      <span style="width:7px;height:5px;background:#E3E5E8;border-radius:2px;"></span><span style="width:7px;height:6px;background:#E3E5E8;border-radius:2px;"></span><span style="width:7px;height:5px;background:#E3E5E8;border-radius:2px;"></span><span style="width:7px;height:7px;background:#E3E5E8;border-radius:2px;"></span><span style="width:7px;height:5px;background:#E3E5E8;border-radius:2px;"></span><span style="width:7px;height:18px;background:#F3B0B2;border-radius:2px;"></span><span style="width:7px;height:30px;background:#E5484D;border-radius:2px;"></span><span style="width:7px;height:38px;background:#E5484D;border-radius:2px;"></span><span style="width:7px;height:42px;background:#E5484D;border-radius:2px;"></span><span style="width:7px;height:40px;background:#E5484D;border-radius:2px;"></span>
+                    </div>
+                    <div>
+                      <div style="font-size:20px;font-weight:700;letter-spacing:-.02em;color:#16181D;">38<span style="font-size:12px;font-weight:500;color:#9197A1;"> errors/min</span></div>
+                      <div style="font-size:12px;color:#5B616E;margin-top:2px;">onset <span class="ap-mono" style="font-size:11px;">14:02:11 UTC</span> · flat baseline before</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- tool call: k8s pod state (ruling out infra) -->
+              <div style="display:flex;gap:12px;margin-bottom:14px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:1.5px;flex:1;background:#EDEEF1;"></span></span>
+                <div style="flex:1;min-width:0;border:1px solid #E6E8EB;border-radius:11px;overflow:hidden;background:#fff;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid #EDEEF1;">
+                    <span style="width:18px;height:18px;border-radius:5px;background:#326CE5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800;">⎈</span>
+                    <span style="font-size:12px;font-weight:600;color:#16181D;">Kubernetes</span>
+                    <span class="ap-mono" style="font-size:11.5px;color:#5B616E;">describe_pod · ns/prod · order-service</span>
+                    <span style="flex:1;"></span>
+                    <span style="font-size:11px;color:#1F8A5B;font-weight:600;">✓ 0.3s</span>
+                  </div>
+                  <div style="padding:4px 13px 11px;">
+                    <table class="ap-mono" style="width:100%;border-collapse:collapse;font-size:11.5px;">
+                      <tr style="color:#9197A1;text-align:left;"><th style="font-weight:500;padding:7px 0;">pod</th><th style="font-weight:500;">phase</th><th style="font-weight:500;">restarts</th><th style="font-weight:500;">mem</th><th style="font-weight:500;">cpu</th></tr>
+                      <tr style="border-top:1px solid #F0F1F4;"><td style="padding:6px 0;color:#16181D;">order-service-7c9d-… </td><td style="color:#1F8A5B;">Running</td><td>0</td><td>418Mi / 1Gi</td><td>0.21</td></tr>
+                      <tr style="border-top:1px solid #F0F1F4;"><td style="padding:6px 0;color:#16181D;">order-service-7c9d-… </td><td style="color:#1F8A5B;">Running</td><td>0</td><td>402Mi / 1Gi</td><td>0.19</td></tr>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- observation -->
+              <div style="display:flex;gap:12px;margin-bottom:24px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:7px;height:7px;border-radius:50%;background:#30A46C;margin-top:6px;"></span></span>
+                <p style="flex:1;font-size:13px;line-height:1.55;color:#3A3E46;"><span style="font-weight:600;color:#16181D;">Ruled out infrastructure.</span> Both pods are <span style="color:#1F8A5B;font-weight:500;">Running</span> with 0 restarts and memory well under limit — no OOM, no crash-loop, no resource pressure. This is an application fault, not infra.</p>
+              </div>
+
+              <!-- phase -->
+              <div style="display:flex;align-items:center;gap:10px;margin:2px 0 18px;"><span class="ap-mono" style="font-size:10px;font-weight:600;letter-spacing:.06em;color:#9197A1;text-transform:uppercase;">What changed</span><span style="flex:1;height:1px;background:#EDEEF1;"></span></div>
+
+              <!-- tool call: cicd deploys -->
+              <div style="display:flex;gap:12px;margin-bottom:14px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:1.5px;flex:1;background:#EDEEF1;"></span></span>
+                <div style="flex:1;min-width:0;border:1px solid #E6E8EB;border-radius:11px;overflow:hidden;background:#fff;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid #EDEEF1;">
+                    <span style="width:18px;height:18px;border-radius:5px;background:#1F8A5B;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;">⟲</span>
+                    <span style="font-size:12px;font-weight:600;color:#16181D;">CI/CD</span>
+                    <span class="ap-mono" style="font-size:11.5px;color:#5B616E;">recent_deployments · window 48h</span>
+                    <span style="flex:1;"></span>
+                    <span style="font-size:11px;color:#1F8A5B;font-weight:600;">✓ 0.6s</span>
+                  </div>
+                  <div style="padding:6px 13px 11px;">
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F0F1F4;">
+                      <span style="width:7px;height:7px;border-radius:50%;background:#E5733B;"></span>
+                      <span class="ap-mono" style="font-size:12px;font-weight:600;color:#16181D;">pricing-service</span>
+                      <span class="ap-mono" style="font-size:11px;background:#FBEEDC;color:#B45309;padding:1px 6px;border-radius:5px;">v2.1.0</span>
+                      <span style="flex:1;"></span>
+                      <span style="font-size:11.5px;color:#E5484D;font-weight:600;">14:01 · 1 min before onset</span>
+                      <span class="ap-mono" style="font-size:11px;color:#9197A1;">#1843</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;">
+                      <span style="width:7px;height:7px;border-radius:50%;background:#D4D7DC;"></span>
+                      <span class="ap-mono" style="font-size:12px;color:#5B616E;">order-service</span>
+                      <span class="ap-mono" style="font-size:11px;background:#F0F1F4;color:#5B616E;padding:1px 6px;border-radius:5px;">v1.7.2</span>
+                      <span style="flex:1;"></span>
+                      <span style="font-size:11.5px;color:#9197A1;">unchanged · 6 days</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- observation -->
+              <div style="display:flex;gap:12px;margin-bottom:24px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:7px;height:7px;border-radius:50%;background:var(--ap-accent,#5B5BD6);margin-top:6px;"></span></span>
+                <p style="flex:1;font-size:13px;line-height:1.55;color:#3A3E46;"><span style="font-weight:600;color:#16181D;">Prime suspect:</span> <span class="ap-mono" style="font-size:12px;">pricing-service v2.1.0</span> shipped 1 minute before the error onset. order-service hasn't changed in 6 days. Pulling the deploy's contract changes.</p>
+              </div>
+
+              <!-- HUMAN STEER -->
+              <div style="display:flex;gap:12px;margin-bottom:14px;">
+                <span style="width:26px;height:26px;flex:none;border-radius:50%;background:#C2410C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">DP</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Devin Park</span><span style="font-size:10px;font-weight:600;color:var(--ap-accent,#5B5BD6);background:var(--ap-accent-tint,#EEEEFB);padding:1px 7px;border-radius:20px;">steering</span><span style="font-size:11px;color:#9197A1;">just now</span></div>
+                  <div style="display:inline-block;background:#F4F2FC;border:1px solid #E5E2F7;border-radius:4px 12px 12px 12px;padding:9px 13px;font-size:13.5px;line-height:1.5;color:#16181D;">pricing 2.1.0 had a response-schema change iirc — check the DTO, not the pricing logic.</div>
+                </div>
+              </div>
+
+              <!-- agent ack -->
+              <div style="display:flex;gap:12px;margin-bottom:18px;">
+                <span style="width:26px;height:26px;flex:none;border-radius:7px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">A</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Apollo</span><span style="font-size:11px;color:#9197A1;">acknowledged steer</span></div>
+                  <p style="font-size:13.5px;line-height:1.6;color:#3A3E46;">Good call — narrowing to the response contract. Diffing <span class="ap-mono" style="font-size:12px;">PricingResponseDto</span> between v2.0.4 and v2.1.0.</p>
+                </div>
+              </div>
+
+              <!-- phase -->
+              <div style="display:flex;align-items:center;gap:10px;margin:2px 0 18px;"><span class="ap-mono" style="font-size:10px;font-weight:600;letter-spacing:.06em;color:#9197A1;text-transform:uppercase;">Code analysis</span><span style="flex:1;height:1px;background:#EDEEF1;"></span></div>
+
+              <!-- tool call: gitlab diff -->
+              <div style="display:flex;gap:12px;margin-bottom:14px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:1.5px;flex:1;background:#EDEEF1;"></span></span>
+                <div style="flex:1;min-width:0;border:1px solid #E6E8EB;border-radius:11px;overflow:hidden;background:#fff;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid #EDEEF1;">
+                    <span style="width:18px;height:18px;border-radius:5px;background:#E2502B;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;">⌥</span>
+                    <span style="font-size:12px;font-weight:600;color:#16181D;">GitLab</span>
+                    <span class="ap-mono" style="font-size:11.5px;color:#5B616E;">commit_diff · pricing-service@a3f9c2</span>
+                    <span style="flex:1;"></span>
+                    <span style="font-size:11px;color:#1F8A5B;font-weight:600;">✓ 0.5s</span>
+                  </div>
+                  <div class="ap-mono" style="font-size:11.5px;line-height:1.7;padding:4px 0 8px;">
+                    <div style="padding:1px 13px;color:#9197A1;">PricingResponseDto.java</div>
+                    <div style="padding:1px 13px;background:#FCECEC;color:#C13438;"><span style="color:#E59A9C;">- 23 </span>  private BigDecimal <span style="background:#F6BDBF;border-radius:2px;">discount</span>;</div>
+                    <div style="padding:1px 13px;background:#E7F6EE;color:#1F7A4D;"><span style="color:#8FD0AE;">+ 23 </span>  private BigDecimal <span style="background:#B7E6CB;border-radius:2px;">discountRate</span>;</div>
+                    <div style="padding:1px 13px;color:#9197A1;"> 24   private String currency;</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- tool call: gitlab file order-service -->
+              <div style="display:flex;gap:12px;margin-bottom:14px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:1.5px;flex:1;background:#EDEEF1;"></span></span>
+                <div style="flex:1;min-width:0;border:1px solid #E6E8EB;border-radius:11px;overflow:hidden;background:#fff;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid #EDEEF1;">
+                    <span style="width:18px;height:18px;border-radius:5px;background:#E2502B;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;">⌥</span>
+                    <span style="font-size:12px;font-weight:600;color:#16181D;">GitLab</span>
+                    <span class="ap-mono" style="font-size:11.5px;color:#5B616E;">get_file · order-service/OrderService.java</span>
+                    <span style="flex:1;"></span>
+                    <span style="font-size:11px;color:#1F8A5B;font-weight:600;">✓ 0.4s</span>
+                  </div>
+                  <div class="ap-mono" style="font-size:11.5px;line-height:1.7;padding:6px 13px 9px;color:#3A3E46;">
+                    <div><span style="color:#C7CAD0;">88 </span>BigDecimal d = pricingResp.<span style="background:#FCECEC;color:#C13438;border-radius:2px;padding:0 2px;">getDiscount()</span>;  <span style="color:#9197A1;">// → null in v2.1.0</span></div>
+                    <div><span style="color:#C7CAD0;">89 </span>total = subtotal.subtract(d.<span style="background:#FCECEC;color:#C13438;border-radius:2px;padding:0 2px;">multiply</span>(subtotal)); <span style="color:#E5484D;">⟵ NPE</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- final observation -->
+              <div style="display:flex;gap:12px;margin-bottom:22px;">
+                <span style="width:26px;flex:none;display:flex;justify-content:center;"><span style="width:7px;height:7px;border-radius:50%;background:var(--ap-accent,#5B5BD6);margin-top:6px;"></span></span>
+                <p style="flex:1;font-size:13px;line-height:1.55;color:#3A3E46;"><span style="font-weight:600;color:#16181D;">Root cause confirmed.</span> v2.1.0 renamed the response field <span class="ap-mono" style="font-size:12px;">discount → discountRate</span>. order-service still deserializes <span class="ap-mono" style="font-size:12px;">discount</span>, so <span class="ap-mono" style="font-size:12px;">getDiscount()</span> returns null and <span class="ap-mono" style="font-size:12px;">calculateTotal</span> throws on the null multiply. No contract test caught it.</p>
+              </div>
+
+              <!-- inline verdict -->
+              <div style="display:flex;gap:12px;margin-bottom:22px;">
+                <span style="width:26px;height:26px;flex:none;border-radius:7px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">A</span>
+                <div style="flex:1;min-width:0;border:1px solid #E6E8EB;border-radius:13px;overflow:hidden;background:#fff;">
+                  <div style="padding:14px 16px 13px;border-bottom:1px solid #F0F1F4;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                      <span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ap-accent,#5B5BD6);">Root cause</span>
+                      <span style="flex:1;"></span>
+                      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#1F8A5B;background:#E7F6EE;padding:2px 8px;border-radius:20px;">High confidence · 94%</span>
+                    </div>
+                    <div style="height:5px;border-radius:3px;background:#EDEEF1;overflow:hidden;margin-bottom:12px;"><div style="width:94%;height:100%;background:linear-gradient(90deg,#30A46C,#1F8A5B);"></div></div>
+                    <p style="font-size:14px;line-height:1.55;color:#16181D;"><span style="font-weight:600;">pricing-service v2.1.0</span> renamed the response field <span class="ap-mono" style="font-size:12px;background:#F0F1F4;padding:0 4px;border-radius:4px;">discount → discountRate</span>. order-service still reads <span class="ap-mono" style="font-size:12px;background:#F0F1F4;padding:0 4px;border-radius:4px;">discount</span>, so deserialization yields null and <span class="ap-mono" style="font-size:12px;background:#F0F1F4;padding:0 4px;border-radius:4px;">calculateTotal</span> throws an NPE.</p>
+                  </div>
+                  <div style="padding:14px 16px;">
+                    <div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9197A1;margin-bottom:12px;">Causal chain · evidence-linked</div>
+                    <div style="display:flex;flex-direction:column;gap:0;">
+                      <div style="display:flex;gap:12px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:20px;height:20px;border-radius:50%;background:#B45309;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">1</span><span style="width:1.5px;flex:1;background:#E3E5E8;"></span></div>
+                        <div style="padding-bottom:14px;flex:1;"><div style="font-size:13px;line-height:1.45;color:#16181D;">pricing-service <span class="ap-mono" style="font-size:12px;">v2.1.0</span> deployed at 14:01 — 1 min before the first error</div><span style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;font-weight:600;color:#B45309;background:#FBEEDC;padding:2px 7px;border-radius:5px;"><span style="width:9px;height:9px;border-radius:3px;background:#1F8A5B;"></span>CI/CD · pipeline #1843</span></div>
+                      </div>
+                      <div style="display:flex;gap:12px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:20px;height:20px;border-radius:50%;background:#E2502B;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">2</span><span style="width:1.5px;flex:1;background:#E3E5E8;"></span></div>
+                        <div style="padding-bottom:14px;flex:1;"><div style="font-size:13px;line-height:1.45;color:#16181D;">That release renamed the response field <span class="ap-mono" style="font-size:12px;">discount → discountRate</span> in <span class="ap-mono" style="font-size:12px;">PricingResponseDto</span></div><span style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;font-weight:600;color:#C13438;background:#FCECEC;padding:2px 7px;border-radius:5px;"><span style="width:9px;height:9px;border-radius:3px;background:#E2502B;"></span>GitLab · commit a3f9c2</span></div>
+                      </div>
+                      <div style="display:flex;gap:12px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:20px;height:20px;border-radius:50%;background:#E2502B;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">3</span><span style="width:1.5px;flex:1;background:#E3E5E8;"></span></div>
+                        <div style="padding-bottom:14px;flex:1;"><div style="font-size:13px;line-height:1.45;color:#16181D;">order-service still calls <span class="ap-mono" style="font-size:12px;">getDiscount()</span> → returns null → <span class="ap-mono" style="font-size:12px;">calculateTotal</span> throws on the null multiply</div><span style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;font-weight:600;color:#C13438;background:#FCECEC;padding:2px 7px;border-radius:5px;"><span style="width:9px;height:9px;border-radius:3px;background:#E2502B;"></span>GitLab · OrderService.java:88</span></div>
+                      </div>
+                      <div style="display:flex;gap:12px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:20px;height:20px;border-radius:50%;background:#7C5CFC;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">4</span></div>
+                        <div style="flex:1;"><div style="font-size:13px;line-height:1.45;color:#16181D;">NPE error rate climbs 0 → 38/min while pods stay healthy — confirming an application fault, not infrastructure</div><span style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;font-weight:600;color:#6D49E0;background:#EEEBFB;padding:2px 7px;border-radius:5px;"><span style="width:9px;height:9px;border-radius:3px;background:#7C5CFC;"></span>Datadog + Kubernetes</span></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="padding:13px 16px;border-top:1px solid #F0F1F4;">
+                    <div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9197A1;margin-bottom:10px;">Supporting evidence · 6 sources</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:7px;">
+                      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#F6F4FE;border:1px solid #E8E3FC;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#7C5CFC;"></span>Datadog · 2</span>
+                      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#EFF4FE;border:1px solid #DCE8FB;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#326CE5;"></span>Kubernetes · 1</span>
+                      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#EBF7F0;border:1px solid #CDEBDD;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#1F8A5B;"></span>CI/CD · 1</span>
+                      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#FDF1ED;border:1px solid #F7D9CE;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#E2502B;"></span>GitLab · 2</span>
+                    </div>
+                  </div>
+                  <div style="padding:13px 16px;border-top:1px solid #F0F1F4;background:#FAFBFA;">
+                    <div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9197A1;margin-bottom:10px;">Remediation</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:13px;">
+                      <div style="display:flex;gap:8px;font-size:13px;line-height:1.45;color:#16181D;"><span style="color:#1F8A5B;font-weight:700;">→</span><span>Roll back pricing-service to <span class="ap-mono" style="font-size:12px;">v2.0.4</span> to restore the contract <span style="font-size:10px;color:#1F8A5B;background:#E7F6EE;padding:1px 5px;border-radius:5px;font-weight:600;">fastest</span></span></div>
+                      <div style="display:flex;gap:8px;font-size:13px;line-height:1.45;color:#16181D;"><span style="color:#5B616E;font-weight:700;">→</span><span>Map <span class="ap-mono" style="font-size:12px;">discountRate</span> in the order-service DTO and redeploy</span></div>
+                      <div style="display:flex;gap:8px;font-size:13px;line-height:1.45;color:#16181D;"><span style="color:#5B616E;font-weight:700;">→</span><span>Add a contract test on the pricing response schema to catch renames in CI</span></div>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                      <button class="ap-btn" style="padding:8px 14px;border-radius:8px;background:#16181D;border:none;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Export report</button>
+                      <button class="ap-ghost" style="padding:8px 14px;border-radius:8px;background:#fff;border:1px solid #DADCE0;color:#16181D;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Create Jira</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- user-added messages -->
+              <sc-for list="{{ userMessages }}" as="m" hint-placeholder-count="0">
+                <div style="display:flex;gap:12px;margin-bottom:14px;animation:ap-rise .25s ease;">
+                  <span style="width:26px;height:26px;flex:none;border-radius:50%;background:#1F8A5B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">MC</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Maya Chen</span><sc-if value="{{ m.isSteer }}"><span style="font-size:10px;font-weight:600;color:var(--ap-accent,#5B5BD6);background:var(--ap-accent-tint,#EEEEFB);padding:1px 7px;border-radius:20px;">steering</span></sc-if><span style="font-size:11px;color:#9197A1;">now</span></div>
+                    <div style="display:inline-block;background:#EAF6F0;border:1px solid #CDEBDD;border-radius:4px 12px 12px 12px;padding:9px 13px;font-size:13.5px;line-height:1.5;color:#16181D;">{{ m.text }}</div>
+                  </div>
+                </div>
+              </sc-for>
+
+              <sc-if value="{{ joined }}">
+                <div style="display:flex;align-items:center;gap:10px;margin:6px 0 14px;animation:ap-rise .25s ease;"><span style="flex:1;height:1px;background:#EDEEF1;"></span><span style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:#5B616E;background:#F0F1F4;padding:3px 11px 3px 4px;border-radius:20px;"><span style="width:18px;height:18px;border-radius:50%;background:#5B616E;color:#fff;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;">SO</span>Sara Okafor joined the investigation</span><span style="flex:1;height:1px;background:#EDEEF1;"></span></div>
+              </sc-if>
+
+              <div style="height:8px;"></div>
+            </div>
+          </div>
+
+          <!-- composer -->
+          <div style="flex:none;border-top:1px solid #E6E8EB;background:#fff;padding:13px 26px 16px;">
+            <div style="max-width:680px;margin:0 auto;">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;">
+                <button onClick="{{ setSteer }}" class="ap-ghost" style="{{ steerBtn }}">⤳ Steer agent</button>
+                <button onClick="{{ setComment }}" class="ap-ghost" style="{{ commentBtn }}">Comment</button>
+                <span style="flex:1;"></span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#9197A1;"><span style="width:6px;height:6px;border-radius:50%;background:{{ composerDotBg }};animation:ap-pulse 1.4s ease-in-out infinite;"></span>{{ composerStatus }}</span>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:9px;border:1px solid #DADCE0;border-radius:12px;background:#fff;padding:9px 9px 9px 13px;">
+                <textarea class="ap-input" value="{{ draft }}" onInput="{{ onDraft }}" onKeyDown="{{ onKey }}" rows="1" placeholder="Steer the investigation, share a hunch, or @mention a teammate…" style="flex:1;resize:none;border:none;background:transparent;font-family:inherit;font-size:13.5px;line-height:1.5;color:#16181D;max-height:120px;"></textarea>
+                <sc-if value="{{ notStopped }}"><button onClick="{{ toggleStop }}" title="Stop agent" class="ap-ghost" style="flex:none;width:34px;height:34px;border-radius:9px;background:#fff;border:1px solid #F0C0C2;color:#C13438;display:flex;align-items:center;justify-content:center;cursor:pointer;"><span style="width:12px;height:12px;border-radius:3px;background:#E5484D;"></span></button></sc-if>
+                <sc-if value="{{ agentStopped }}"><button onClick="{{ toggleStop }}" class="ap-ghost" style="flex:none;display:flex;align-items:center;gap:6px;padding:0 12px;height:34px;border-radius:9px;background:#fff;border:1px solid #DADCE0;color:#16181D;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">▶ Resume</button></sc-if>
+                <button onClick="{{ send }}" class="ap-btn" style="flex:none;width:34px;height:34px;border-radius:9px;background:var(--ap-accent,#5B5BD6);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;">↑</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <sc-if value="{{ showRail }}">
+        <!-- ===== right: root cause + evidence + participants ===== -->
+        <aside style="width:372px;flex:none;background:#FBFBFC;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;">
+
+          <!-- root cause now shown inline in the chat; rail kept for ongoing context -->
+          <div style="display:none;">
+            <div style="padding:14px 15px 12px;border-bottom:1px solid #F0F1F4;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <span style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9197A1;">Root cause</span>
+                <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#1F8A5B;background:#E7F6EE;padding:2px 8px;border-radius:20px;">High confidence · 94%</span>
+              </div>
+              <div style="height:5px;border-radius:3px;background:#EDEEF1;overflow:hidden;"><div style="width:94%;height:100%;background:linear-gradient(90deg,#30A46C,#1F8A5B);"></div></div>
+              <p style="font-size:13.5px;line-height:1.55;color:#16181D;margin-top:12px;"><span style="font-weight:600;">pricing-service v2.1.0</span> renamed the response field <span class="ap-mono" style="font-size:12px;background:#F0F1F4;padding:0 4px;border-radius:4px;">discount → discountRate</span>. order-service still reads <span class="ap-mono" style="font-size:12px;background:#F0F1F4;padding:0 4px;border-radius:4px;">discount</span>, so deserialization yields null and <span class="ap-mono" style="font-size:12px;background:#F0F1F4;padding:0 4px;border-radius:4px;">calculateTotal</span> throws an NPE.</p>
+            </div>
+            <!-- causal chain -->
+            <div style="padding:13px 15px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9197A1;margin-bottom:11px;">Causal chain · evidence-linked</div>
+              <div style="display:flex;flex-direction:column;gap:0;">
+                <div style="display:flex;gap:10px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:18px;height:18px;border-radius:50%;background:#1F8A5B;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">1</span><span style="width:1.5px;flex:1;background:#E3E5E8;"></span></div>
+                  <div style="padding-bottom:13px;"><div style="font-size:12.5px;line-height:1.45;color:#16181D;">pricing-service <span class="ap-mono" style="font-size:11px;">v2.1.0</span> deployed at 14:01</div><span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:600;color:#B45309;background:#FBEEDC;padding:1px 6px;border-radius:5px;">CI/CD · #1843</span></div>
+                </div>
+                <div style="display:flex;gap:10px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:18px;height:18px;border-radius:50%;background:#E2502B;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">2</span><span style="width:1.5px;flex:1;background:#E3E5E8;"></span></div>
+                  <div style="padding-bottom:13px;"><div style="font-size:12.5px;line-height:1.45;color:#16181D;">Field renamed <span class="ap-mono" style="font-size:11px;">discount→discountRate</span></div><span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:600;color:#C13438;background:#FCECEC;padding:1px 6px;border-radius:5px;">GitLab · a3f9c2</span></div>
+                </div>
+                <div style="display:flex;gap:10px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:18px;height:18px;border-radius:50%;background:#E2502B;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">3</span><span style="width:1.5px;flex:1;background:#E3E5E8;"></span></div>
+                  <div style="padding-bottom:13px;"><div style="font-size:12.5px;line-height:1.45;color:#16181D;"><span class="ap-mono" style="font-size:11px;">getDiscount()</span> → null in calculateTotal</div><span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:600;color:#C13438;background:#FCECEC;padding:1px 6px;border-radius:5px;">GitLab · OrderService:88</span></div>
+                </div>
+                <div style="display:flex;gap:10px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;"><span style="width:18px;height:18px;border-radius:50%;background:#7C5CFC;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">4</span></div>
+                  <div><div style="font-size:12.5px;line-height:1.45;color:#16181D;">NPE error rate 0→38/min · pods healthy</div><span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:600;color:#6D49E0;background:#EEEBFB;padding:1px 6px;border-radius:5px;">Datadog + K8s</span></div>
+                </div>
+              </div>
+            </div>
+            <!-- remediation -->
+            <div style="padding:13px 15px;border-top:1px solid #F0F1F4;background:#FAFBFA;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9197A1;margin-bottom:9px;">Remediation</div>
+              <div style="display:flex;flex-direction:column;gap:7px;">
+                <div style="display:flex;gap:8px;font-size:12.5px;line-height:1.4;color:#16181D;"><span style="color:#1F8A5B;font-weight:700;">→</span>Roll back pricing-service to <span class="ap-mono" style="font-size:11px;">v2.0.4</span> to restore the contract <span style="font-size:10px;color:#1F8A5B;background:#E7F6EE;padding:1px 5px;border-radius:5px;font-weight:600;">fastest</span></div>
+                <div style="display:flex;gap:8px;font-size:12.5px;line-height:1.4;color:#16181D;"><span style="color:#5B616E;font-weight:700;">→</span>Map <span class="ap-mono" style="font-size:11px;">discountRate</span> in order-service DTO &amp; redeploy</div>
+                <div style="display:flex;gap:8px;font-size:12.5px;line-height:1.4;color:#16181D;"><span style="color:#5B616E;font-weight:700;">→</span>Add a contract test on the pricing response schema</div>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:13px;">
+                <button class="ap-btn" style="flex:1;padding:8px;border-radius:8px;background:#16181D;border:none;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Export report</button>
+                <button class="ap-ghost" style="flex:1;padding:8px;border-radius:8px;background:#fff;border:1px solid #DADCE0;color:#16181D;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Create Jira</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- investigation context -->
+          <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:13px 15px;flex:none;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9197A1;margin-bottom:11px;">Investigation context</div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:#5B616E;flex:1;">Services</span><span class="ap-mono" style="font-size:11px;background:#F0F1F4;padding:2px 7px;border-radius:5px;">order-service</span><span style="color:#C7CAD0;font-size:11px;">→</span><span class="ap-mono" style="font-size:11px;background:#F0F1F4;padding:2px 7px;border-radius:5px;">pricing</span></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:#5B616E;flex:1;">Started</span><span style="font-size:12px;font-weight:500;color:#16181D;">14:02 UTC · 6m ago</span></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:#5B616E;flex:1;">Error rate</span><span style="display:flex;align-items:flex-end;gap:2px;height:16px;"><span style="width:4px;height:4px;background:#E3E5E8;border-radius:1px;"></span><span style="width:4px;height:5px;background:#E3E5E8;border-radius:1px;"></span><span style="width:4px;height:4px;background:#E3E5E8;border-radius:1px;"></span><span style="width:4px;height:10px;background:#F3B0B2;border-radius:1px;"></span><span style="width:4px;height:14px;background:#E5484D;border-radius:1px;"></span><span style="width:4px;height:16px;background:#E5484D;border-radius:1px;"></span></span><span style="font-size:12px;font-weight:600;color:#C13438;">38/min</span></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:#5B616E;flex:1;">Suspect release</span><span class="ap-mono" style="font-size:11px;color:#B45309;background:#FBEEDC;padding:2px 7px;border-radius:5px;">pricing v2.1.0</span></div>
+            </div>
+          </div>
+
+          <!-- evidence collected -->
+          <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:13px 15px;flex:none;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;"><span style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9197A1;">Evidence collected</span><span style="font-size:11px;color:#9197A1;">6 sources</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#F6F4FE;border:1px solid #E8E3FC;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#7C5CFC;"></span>Datadog · 2</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#EFF4FE;border:1px solid #DCE8FB;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#326CE5;"></span>Kubernetes · 1</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#EBF7F0;border:1px solid #CDEBDD;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#1F8A5B;"></span>CI/CD · 1</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:#16181D;background:#FDF1ED;border:1px solid #F7D9CE;padding:4px 9px;border-radius:7px;"><span style="width:13px;height:13px;border-radius:4px;background:#E2502B;"></span>GitLab · 2</span>
+            </div>
+          </div>
+
+          <!-- participants -->
+          <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:13px 15px;flex:none;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;"><span style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9197A1;">In this room</span><button onClick="{{ openInvite }}" class="ap-ghost" style="font-size:11.5px;font-weight:600;color:var(--ap-accent,#5B5BD6);background:transparent;border:none;cursor:pointer;font-family:inherit;">+ Add people</button></div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <div style="display:flex;align-items:center;gap:9px;"><span style="width:26px;height:26px;border-radius:7px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">A</span><span style="flex:1;font-size:12.5px;font-weight:600;">Apollo</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ap-accent,#5B5BD6);"><span style="width:6px;height:6px;border-radius:50%;background:var(--ap-accent,#5B5BD6);animation:ap-pulse 1.4s ease-in-out infinite;"></span>investigating</span></div>
+              <div style="display:flex;align-items:center;gap:9px;"><span style="width:26px;height:26px;border-radius:50%;background:#1F8A5B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">MC</span><span style="flex:1;font-size:12.5px;font-weight:500;">Maya Chen <span style="color:#9197A1;font-weight:400;">· you</span></span><span style="width:6px;height:6px;border-radius:50%;background:#30A46C;"></span></div>
+              <div style="display:flex;align-items:center;gap:9px;"><span style="width:26px;height:26px;border-radius:50%;background:#C2410C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">DP</span><span style="flex:1;font-size:12.5px;font-weight:500;">Devin Park</span><span style="width:6px;height:6px;border-radius:50%;background:#30A46C;"></span></div>
+              <div style="display:flex;align-items:center;gap:9px;"><span style="width:26px;height:26px;border-radius:50%;background:#5B616E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">SO</span><span style="flex:1;font-size:12.5px;font-weight:500;color:{{ saraNameColor }};">Sara Okafor</span><sc-if value="{{ joined }}"><span style="width:6px;height:6px;border-radius:50%;background:#30A46C;"></span></sc-if><sc-if value="{{ notJoined }}"><span style="font-size:11px;color:#9197A1;">viewing</span></sc-if></div>
+            </div>
+          </div>
+        </aside>
+        </sc-if>
+      </div>
+    </section>
+    </sc-if>
+
+    <!-- ============ INCIDENTS ============ -->
+    <sc-if value="{{ isIncidents }}">
+    <section data-screen-label="Incidents" style="height:100%;overflow-y:auto;">
+      <header style="background:#fff;border-bottom:1px solid #E6E8EB;padding:20px 28px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <h1 style="font-size:20px;font-weight:600;letter-spacing:-.01em;flex:1;">Incidents</h1>
+          <input placeholder="Search incidents…" style="width:190px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-family:inherit;outline:none;color:#16181D;" />
+          <button class="ap-ghost" style="padding:8px 12px;border-radius:8px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;color:#16181D;white-space:nowrap;">All severities ▾</button>
+          <button class="ap-ghost" style="padding:8px 12px;border-radius:8px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;color:#16181D;white-space:nowrap;">Any status ▾</button>
+          <button class="ap-ghost" style="padding:8px 12px;border-radius:8px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;color:#16181D;white-space:nowrap;">Last 24h ▾</button>
+          <button class="ap-btn" style="padding:8px 14px;border-radius:8px;background:#16181D;border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;">New investigation</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+          <div style="flex:1;background:#FBFBFC;border:1px solid #E6E8EB;border-radius:11px;padding:13px 15px;"><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;">5</div><div style="font-size:12px;color:#5B616E;margin-top:2px;">Open</div></div>
+          <div style="flex:1;background:#FBFBFC;border:1px solid #E6E8EB;border-radius:11px;padding:13px 15px;"><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;color:var(--ap-accent,#5B5BD6);">1</div><div style="font-size:12px;color:#5B616E;margin-top:2px;">Investigating now</div></div>
+          <div style="flex:1;background:#FBFBFC;border:1px solid #E6E8EB;border-radius:11px;padding:13px 15px;"><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;color:#1F8A5B;">12</div><div style="font-size:12px;color:#5B616E;margin-top:2px;">Resolved today</div></div>
+          <div style="flex:1;background:#FBFBFC;border:1px solid #E6E8EB;border-radius:11px;padding:13px 15px;"><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;">4m 12s</div><div style="font-size:12px;color:#5B616E;margin-top:2px;">Median time to root cause</div></div>
+        </div>
+      </header>
+      <div style="padding:18px 28px;">
+        <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:14px;padding:9px 18px;border-bottom:1px solid #EDEEF1;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:#9197A1;">
+            <span style="width:90px;">Severity</span><span style="flex:1;">Incident</span><span style="width:130px;">Sources</span><span style="width:110px;">Status</span><span style="width:80px;">People</span><span style="width:70px;text-align:right;">Age</span>
+          </div>
+          <sc-for list="{{ incidents }}" as="i" hint-placeholder-count="6">
+            <button onClick="{{ i.open }}" class="ap-row" style="width:100%;display:flex;align-items:center;gap:14px;padding:14px 18px;border:none;border-bottom:1px solid #F0F1F4;background:transparent;cursor:pointer;text-align:left;font-family:inherit;">
+              <span style="width:90px;flex:none;"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;color:{{ i.sevFg }};background:{{ i.sevBg }};"><span style="width:6px;height:6px;border-radius:50%;background:{{ i.sevFg }};"></span>{{ i.sev }}</span></span>
+              <span style="flex:1;min-width:0;">
+                <span style="display:block;font-size:13.5px;font-weight:600;color:#16181D;line-height:1.3;">{{ i.title }}</span>
+                <span class="ap-mono" style="display:block;font-size:11px;color:#9197A1;margin-top:2px;">{{ i.svc }}</span>
+              </span>
+              <span style="width:130px;flex:none;display:flex;gap:4px;">
+                <sc-for list="{{ i.sources }}" as="s" hint-placeholder-count="3"><span style="width:16px;height:16px;border-radius:5px;background:{{ s }};"></span></sc-for>
+              </span>
+              <span style="width:110px;flex:none;"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:{{ i.statusFg }};"><span style="width:6px;height:6px;border-radius:50%;background:{{ i.statusFg }};"></span>{{ i.status }}</span></span>
+              <span style="width:80px;flex:none;font-size:12px;color:#5B616E;">{{ i.people }}</span>
+              <span style="width:70px;flex:none;text-align:right;font-size:12px;color:#9197A1;">{{ i.age }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+    </sc-if>
+
+    <!-- ============ INTEGRATIONS ============ -->
+    <sc-if value="{{ isIntegrations }}">
+    <section data-screen-label="Integrations" style="height:100%;overflow-y:auto;">
+      <div style="max-width:920px;margin:0 auto;padding:34px 28px 48px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ap-accent,#5B5BD6);">Connect your stack</div>
+        <h1 style="font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:6px;">Point Apollo at any deployed app</h1>
+        <p style="font-size:14.5px;line-height:1.6;color:#5B616E;margin-top:8px;max-width:620px;">No agents to install, no hard requirements. Connect whatever you already run — the more signals Apollo can reach, the deeper every investigation goes. Start with one.</p>
+
+        <!-- capability meter -->
+        <div style="background:#fff;border:1px solid #E6E8EB;border-radius:14px;padding:18px 20px;margin-top:24px;display:flex;align-items:center;gap:22px;">
+          <div style="flex:none;width:128px;">
+            <div style="font-size:12px;color:#5B616E;margin-bottom:6px;">Analysis depth</div>
+            <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;color:#1F8A5B;">Deep</div>
+          </div>
+          <div style="flex:1;">
+            <div style="height:8px;border-radius:5px;background:#EDEEF1;overflow:hidden;"><div style="width:82%;height:100%;background:linear-gradient(90deg,var(--ap-accent,#5B5BD6),#30A46C);"></div></div>
+            <div style="display:flex;justify-content:space-between;margin-top:7px;font-size:11px;color:#9197A1;"><span>Logs only</span><span>+ Code &amp; deploys</span><span>+ Infra &amp; config</span></div>
+          </div>
+          <div style="flex:none;text-align:right;"><div style="font-size:13px;font-weight:600;color:#16181D;">5 of 6 connected</div><div style="font-size:12px;color:#9197A1;">31 agent tools unlocked</div></div>
+        </div>
+
+        <!-- integration grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">
+          <sc-for list="{{ integrations }}" as="g" hint-placeholder-count="6">
+            <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:16px;display:flex;gap:13px;">
+              <span style="width:38px;height:38px;flex:none;border-radius:10px;background:{{ g.color }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;">{{ g.glyph }}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;font-weight:600;flex:1;">{{ g.name }}</span><span style="font-size:11px;font-weight:600;color:{{ g.statusFg }};background:{{ g.statusBg }};padding:2px 8px;border-radius:20px;">{{ g.status }}</span></div>
+                <div style="font-size:12.5px;line-height:1.5;color:#5B616E;margin-top:4px;">{{ g.desc }}</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:11px;">
+                  <span class="ap-mono" style="font-size:11px;color:#9197A1;">{{ g.tools }}</span>
+                  <span style="flex:1;"></span>
+                  <button data-int="{{ g.name }}" class="ap-ghost" style="font-size:12px;font-weight:600;color:{{ g.ctaFg }};background:{{ g.ctaBg }};border:1px solid {{ g.ctaBorder }};padding:5px 11px;border-radius:7px;cursor:pointer;font-family:inherit;">{{ g.cta }}</button>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+    </sc-if>
+
+    <!-- ============ HOME / LAUNCH ============ -->
+    <sc-if value="{{ isHome }}">
+    <section data-screen-label="Home" style="height:100%;overflow-y:auto;">
+      <div style="max-width:1060px;margin:0 auto;padding:34px 28px 48px;">
+        <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:22px;">
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9197A1;">{{ org }} · production</div>
+            <h1 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin-top:6px;">Good morning, Maya</h1>
+            <p style="font-size:14px;color:#5B616E;margin-top:5px;">One investigation is live and two incidents are waiting in the queue.</p>
+          </div>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#1F8A5B;background:#E7F6EE;padding:6px 12px;border-radius:20px;"><span style="width:7px;height:7px;border-radius:50%;background:#30A46C;"></span>On-call · healthy</span>
+        </div>
+
+        <div style="background:linear-gradient(135deg,#16181D,#23253A);border-radius:16px;padding:24px;color:#fff;position:relative;overflow:hidden;">
+          <div style="position:absolute;right:-30px;top:-30px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,252,.4),transparent 70%);"></div>
+          <div style="position:relative;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#A9ABE8;">Launch Apollo</div>
+            <h2 style="font-size:19px;font-weight:600;margin-top:6px;letter-spacing:-.01em;">Start a root-cause investigation</h2>
+            <p style="font-size:13px;color:#B7BAC6;margin-top:4px;max-width:520px;line-height:1.5;">Point Apollo at a service or paste an alert. It pulls signals across your connected stack and reasons to a verified root cause.</p>
+            <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:9px 13px;min-width:210px;">
+                <span style="font-size:12px;color:#8E91A8;">Service</span>
+                <select style="flex:1;background:transparent;border:none;color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;outline:none;">
+                  <option style="color:#16181D;">order-service</option>
+                  <option style="color:#16181D;">pricing-service</option>
+                  <option style="color:#16181D;">checkout</option>
+                  <option style="color:#16181D;">banking-app</option>
+                </select>
+              </div>
+              <input placeholder="…or paste an alert / symptom" style="flex:1;min-width:230px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:9px 13px;color:#fff;font-family:inherit;font-size:13px;outline:none;" />
+              <button onClick="{{ goWorkbench }}" class="ap-btn" style="padding:9px 18px;border-radius:9px;background:var(--ap-accent,#5B5BD6);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;">Launch investigation</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:14px;">
+          <div style="flex:1;background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:16px 18px;"><div style="display:flex;align-items:baseline;gap:8px;"><span style="font-size:26px;font-weight:700;letter-spacing:-.02em;">5</span><span style="font-size:12px;font-weight:600;color:#E5484D;background:#FCECEC;padding:1px 7px;border-radius:20px;">2 critical</span></div><div style="font-size:12.5px;color:#5B616E;margin-top:4px;">Active incidents</div></div>
+          <div style="flex:1;background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:16px 18px;"><div style="display:flex;align-items:center;gap:8px;"><span style="font-size:26px;font-weight:700;letter-spacing:-.02em;color:var(--ap-accent,#5B5BD6);">1</span><span style="width:7px;height:7px;border-radius:50%;background:var(--ap-accent,#5B5BD6);animation:ap-pulse 1.4s ease-in-out infinite;"></span></div><div style="font-size:12.5px;color:#5B616E;margin-top:4px;">Investigating now</div></div>
+          <div style="flex:1;background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:16px 18px;"><div style="font-size:26px;font-weight:700;letter-spacing:-.02em;">4m 12s</div><div style="font-size:12.5px;color:#5B616E;margin-top:4px;">Median time to root cause · 24h</div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-top:14px;align-items:start;">
+          <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;overflow:hidden;">
+            <div style="display:flex;align-items:center;padding:13px 16px;border-bottom:1px solid #EDEEF1;"><span style="font-size:13px;font-weight:600;flex:1;">Active investigations</span><button onClick="{{ goIncidents }}" class="ap-ghost" style="font-size:12px;font-weight:600;color:var(--ap-accent,#5B5BD6);background:transparent;border:none;cursor:pointer;font-family:inherit;">View all</button></div>
+            <sc-for list="{{ activeInv }}" as="i" hint-placeholder-count="3">
+              <button onClick="{{ i.open }}" class="ap-row" style="width:100%;display:flex;align-items:center;gap:12px;padding:13px 16px;border:none;border-bottom:1px solid #F0F1F4;background:transparent;cursor:pointer;text-align:left;font-family:inherit;">
+                <span style="width:8px;height:8px;border-radius:50%;flex:none;background:{{ i.sevFg }};"></span>
+                <span style="flex:1;min-width:0;"><span style="display:block;font-size:13px;font-weight:600;color:#16181D;line-height:1.35;">{{ i.title }}</span><span class="ap-mono" style="display:block;font-size:11px;color:#9197A1;margin-top:2px;">{{ i.svc }}</span></span>
+                <span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:{{ i.statusFg }};"><span style="width:6px;height:6px;border-radius:50%;background:{{ i.statusFg }};"></span>{{ i.status }}</span>
+                <span style="font-size:12px;color:#9197A1;width:34px;text-align:right;">{{ i.age }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;overflow:hidden;">
+            <div style="display:flex;align-items:center;padding:13px 16px;border-bottom:1px solid #EDEEF1;"><span style="font-size:13px;font-weight:600;flex:1;">Connected stack</span><button onClick="{{ goIntegrations }}" class="ap-ghost" style="font-size:12px;font-weight:600;color:var(--ap-accent,#5B5BD6);background:transparent;border:none;cursor:pointer;font-family:inherit;">Manage</button></div>
+            <div style="padding:6px 16px 12px;">
+              <sc-for list="{{ sourceHealth }}" as="x" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F4F5F7;">
+                  <span style="width:24px;height:24px;flex:none;border-radius:7px;background:{{ x.color }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;">{{ x.glyph }}</span>
+                  <span style="flex:1;font-size:12.5px;font-weight:500;">{{ x.name }}</span>
+                  <span style="font-size:11px;color:#9197A1;">{{ x.note }}</span>
+                  <sc-if value="{{ x.ok }}"><span style="width:7px;height:7px;border-radius:50%;background:#30A46C;"></span></sc-if>
+                  <sc-if value="{{ x.bad }}"><span style="width:7px;height:7px;border-radius:50%;background:#D4D7DC;"></span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    </sc-if>
+
+    <!-- ============ PROFILE ============ -->
+    <sc-if value="{{ isProfile }}">
+    <section data-screen-label="Profile" style="height:100%;overflow-y:auto;">
+      <div style="max-width:760px;margin:0 auto;padding:34px 28px 48px;">
+        <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;">Profile</h1>
+
+        <div style="background:#fff;border:1px solid #E6E8EB;border-radius:14px;padding:20px;margin-top:18px;display:flex;align-items:center;gap:16px;">
+          <span style="width:56px;height:56px;flex:none;border-radius:50%;background:#1F8A5B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;">MC</span>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:9px;"><span style="font-size:17px;font-weight:600;">Maya Chen</span><span style="font-size:11px;font-weight:600;color:var(--ap-accent-deep,#4F4FCB);background:var(--ap-accent-tint,#EEEEFB);padding:2px 9px;border-radius:20px;">{{ roleLabel }}</span></div>
+            <div style="font-size:13px;color:#5B616E;margin-top:3px;">maya.chen@acme.io · {{ org }}</div>
+          </div>
+          <button class="ap-ghost" style="padding:8px 13px;border-radius:8px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Edit</button>
+        </div>
+
+        <div style="background:#FBFAFE;border:1px dashed #D6D3F2;border-radius:13px;padding:15px 18px;margin-top:12px;display:flex;align-items:center;gap:14px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--ap-accent-deep,#4F4FCB);">Preview as role</div><div style="font-size:12px;color:#7A7AA8;margin-top:2px;">Prototype control — flips what this account can see and do.</div></div>
+          <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E2F7;border-radius:9px;padding:4px;">
+            <button onClick="{{ setAdmin }}" style="{{ roleAdminBtn }}">Admin</button>
+            <button onClick="{{ setMember }}" style="{{ roleMemberBtn }}">Member</button>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #E6E8EB;border-radius:14px;padding:18px 20px;margin-top:12px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9197A1;margin-bottom:6px;">Notifications</div>
+          <div style="display:flex;align-items:center;padding:11px 0;border-bottom:1px solid #F0F1F4;"><div style="flex:1;"><div style="font-size:13.5px;font-weight:500;">Critical incidents</div><div style="font-size:12px;color:#9197A1;margin-top:1px;">Page me the moment a critical fires</div></div><span style="width:38px;height:22px;border-radius:20px;background:#30A46C;position:relative;flex:none;"><span style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:#fff;"></span></span></div>
+          <div style="display:flex;align-items:center;padding:11px 0;border-bottom:1px solid #F0F1F4;"><div style="flex:1;"><div style="font-size:13.5px;font-weight:500;">Steer mentions</div><div style="font-size:12px;color:#9197A1;margin-top:1px;">When someone @mentions me in a room</div></div><span style="width:38px;height:22px;border-radius:20px;background:#30A46C;position:relative;flex:none;"><span style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:#fff;"></span></span></div>
+          <div style="display:flex;align-items:center;padding:11px 0;"><div style="flex:1;"><div style="font-size:13.5px;font-weight:500;">Daily digest</div><div style="font-size:12px;color:#9197A1;margin-top:1px;">A morning summary of resolved incidents</div></div><span style="width:38px;height:22px;border-radius:20px;background:#D4D7DC;position:relative;flex:none;"><span style="position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;"></span></span></div>
+        </div>
+
+        <sc-if value="{{ isAdmin }}">
+        <div style="background:#fff;border:1px solid #E6E8EB;border-radius:14px;overflow:hidden;margin-top:12px;">
+          <div style="display:flex;align-items:center;gap:8px;padding:15px 20px;border-bottom:1px solid #EDEEF1;"><span style="font-size:13px;font-weight:600;flex:1;">Workspace administration</span><span style="font-size:9px;font-weight:700;letter-spacing:.04em;color:#9197A1;background:#F0F1F4;padding:2px 7px;border-radius:20px;">ADMIN</span></div>
+          <button onClick="{{ goIntegrations }}" class="ap-row" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px 20px;border:none;border-bottom:1px solid #F0F1F4;background:transparent;cursor:pointer;text-align:left;font-family:inherit;"><span style="width:30px;height:30px;border-radius:8px;background:var(--ap-accent-tint,#EEEEFB);color:var(--ap-accent-deep,#4F4FCB);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;">⚯</span><span style="flex:1;"><span style="display:block;font-size:13.5px;font-weight:600;color:#16181D;">Integrations</span><span style="display:block;font-size:12px;color:#9197A1;margin-top:1px;">5 of 6 sources connected · 31 tools</span></span><span style="color:#C7CAD0;font-size:15px;">›</span></button>
+          <button onClick="{{ startOrg }}" class="ap-row" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px 20px;border:none;border-bottom:1px solid #F0F1F4;background:transparent;cursor:pointer;text-align:left;font-family:inherit;"><span style="width:30px;height:30px;border-radius:8px;background:var(--ap-accent-tint,#EEEEFB);color:var(--ap-accent-deep,#4F4FCB);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;">+</span><span style="flex:1;"><span style="display:block;font-size:13.5px;font-weight:600;color:#16181D;">Create a new organization</span><span style="display:block;font-size:12px;color:#9197A1;margin-top:1px;">Spin up a separate workspace</span></span><span style="color:#C7CAD0;font-size:15px;">›</span></button>
+          <div style="padding:14px 20px;">
+            <div style="display:flex;align-items:center;margin-bottom:10px;"><span style="font-size:12px;font-weight:600;color:#5B616E;flex:1;">Members · 4</span><button onClick="{{ openInvite }}" class="ap-ghost" style="font-size:12px;font-weight:600;color:var(--ap-accent,#5B5BD6);background:transparent;border:none;cursor:pointer;font-family:inherit;">+ Invite</button></div>
+            <sc-for list="{{ members }}" as="m" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:10px;padding:7px 0;">
+                <span style="width:28px;height:28px;flex:none;border-radius:50%;background:{{ m.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">{{ m.initials }}</span>
+                <span style="flex:1;min-width:0;"><span style="font-size:13px;font-weight:500;">{{ m.name }}</span><sc-if value="{{ m.you }}"><span style="font-size:11px;color:#9197A1;"> · you</span></sc-if><span style="display:block;font-size:11px;color:#9197A1;">{{ m.email }}</span></span>
+                <span style="font-size:11px;font-weight:600;color:{{ m.roleFg }};background:{{ m.roleBg }};padding:2px 9px;border-radius:20px;">{{ m.role }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ notAdmin }}">
+        <div style="background:#FAFAFB;border:1px solid #E6E8EB;border-radius:14px;padding:16px 20px;margin-top:12px;display:flex;align-items:center;gap:11px;">
+          <span style="width:30px;height:30px;flex:none;border-radius:8px;background:#F0F1F4;color:#9197A1;display:flex;align-items:center;justify-content:center;font-size:14px;">⊘</span>
+          <div style="font-size:13px;color:#5B616E;line-height:1.45;">Integrations and member management are handled by your workspace admins. You have full access to investigations and incident rooms.</div>
+        </div>
+        </sc-if>
+      </div>
+    </section>
+    </sc-if>
+
+  </main>
+
+  <!-- ============ INVITE MODAL ============ -->
+  <sc-if value="{{ inviteOpen }}">
+  <div onClick="{{ closeInvite }}" style="position:fixed;inset:0;z-index:60;background:rgba(16,18,29,.42);display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div onClick="{{ stop }}" style="width:440px;max-width:100%;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(16,18,29,.28);overflow:hidden;">
+      <div style="padding:18px 20px 0;display:flex;align-items:flex-start;gap:10px;"><div style="flex:1;"><div style="font-size:16px;font-weight:600;">Add people to INC-2043</div><div style="font-size:12.5px;color:#5B616E;margin-top:3px;">They'll join the live investigation room.</div></div><button onClick="{{ closeInvite }}" class="ap-ghost" style="width:28px;height:28px;flex:none;border-radius:7px;border:none;background:#F0F1F4;cursor:pointer;font-size:13px;color:#5B616E;">✕</button></div>
+
+      <sc-if value="{{ notInviteSent }}">
+      <div style="padding:16px 20px 20px;">
+        <label style="font-size:12px;font-weight:600;color:#5B616E;">Email</label>
+        <input value="{{ inviteEmail }}" onInput="{{ onInviteEmail }}" placeholder="teammate@acme.io" style="width:100%;margin-top:6px;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13.5px;outline:none;" />
+        <label style="font-size:12px;font-weight:600;color:#5B616E;display:block;margin-top:14px;">Role</label>
+        <div style="display:flex;gap:6px;margin-top:6px;background:#F4F5F7;border-radius:9px;padding:4px;width:fit-content;">
+          <button onClick="{{ setInviteMember }}" style="{{ invRoleMemberBtn }}">Member</button>
+          <button onClick="{{ setInviteAdmin }}" style="{{ invRoleAdminBtn }}">Admin</button>
+        </div>
+        <button onClick="{{ sendInvite }}" class="ap-btn" style="width:100%;margin-top:18px;padding:11px;border-radius:9px;background:var(--ap-accent,#5B5BD6);border:none;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;">Send invite</button>
+        <div style="font-size:11.5px;color:#9197A1;text-align:center;margin-top:10px;">Secured by magic link — no password setup required.</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ inviteSent }}">
+      <div style="padding:16px 20px 20px;">
+        <div style="display:flex;align-items:center;gap:10px;background:#E7F6EE;border:1px solid #CDEBDD;border-radius:10px;padding:12px 14px;"><span style="width:24px;height:24px;flex:none;border-radius:50%;background:#1F8A5B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;">✓</span><div style="font-size:13px;font-weight:600;color:#16623F;">Invite sent to {{ inviteEmail }}</div></div>
+        <label style="font-size:12px;font-weight:600;color:#5B616E;display:block;margin-top:16px;">Magic link</label>
+        <div style="display:flex;gap:8px;margin-top:6px;"><input readonly value="https://apollo.acme.io/i/INC-2043?t=v8f3a1" class="ap-mono" style="flex:1;min-width:0;border:1px solid #DADCE0;border-radius:9px;padding:9px 11px;font-size:12px;color:#5B616E;background:#FAFAFB;outline:none;" /><button class="ap-ghost" style="padding:9px 13px;border-radius:9px;border:1px solid #DADCE0;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Copy</button></div>
+        <button onClick="{{ previewInvite }}" class="ap-btn" style="width:100%;margin-top:16px;padding:11px;border-radius:9px;background:#16181D;border:none;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;">Preview what they'll receive →</button>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ INVITE ACCEPT (recipient) ============ -->
+  <sc-if value="{{ isAccept }}">
+  <div data-screen-label="Invite accept" style="position:fixed;inset:0;z-index:70;background:#F6F7F9;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;">
+    <div style="width:460px;max-width:100%;">
+      <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;"><span style="width:34px;height:34px;border-radius:9px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;">A</span><span style="font-size:17px;font-weight:700;letter-spacing:-.01em;">Apollo</span></div>
+      <div style="background:#fff;border:1px solid #E6E8EB;border-radius:16px;box-shadow:0 12px 40px rgba(16,18,29,.10);overflow:hidden;">
+        <div style="padding:22px 24px 18px;">
+          <div style="display:flex;align-items:center;gap:9px;"><span style="width:30px;height:30px;flex:none;border-radius:50%;background:#C2410C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;">DP</span><div style="font-size:13px;color:#5B616E;"><span style="font-weight:600;color:#16181D;">Devin Park</span> invited you to investigate</div></div>
+          <div style="margin-top:14px;border:1px solid #F0E0DC;background:#FDF6F3;border-radius:11px;padding:13px 15px;">
+            <div style="display:flex;align-items:center;gap:8px;"><span class="ap-mono" style="font-size:11px;color:#9197A1;">INC-2043</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#E5484D;background:#FCECEC;padding:1px 8px;border-radius:20px;">Critical</span></div>
+            <div style="font-size:14px;font-weight:600;margin-top:7px;line-height:1.35;">order-service throwing NullPointerException on checkout</div>
+            <div style="font-size:12px;color:#5B616E;margin-top:5px;">Apollo + 2 people are investigating now.</div>
+          </div>
+        </div>
+        <div style="padding:4px 24px 22px;">
+          <label style="font-size:12px;font-weight:600;color:#5B616E;">Your name</label>
+          <input value="Sara Okafor" style="width:100%;margin-top:6px;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13.5px;outline:none;" />
+          <label style="font-size:12px;font-weight:600;color:#5B616E;display:block;margin-top:13px;">Email</label>
+          <input value="sara.okafor@acme.io" readonly style="width:100%;margin-top:6px;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13.5px;color:#5B616E;background:#FAFAFB;outline:none;" />
+          <button onClick="{{ acceptInvite }}" class="ap-btn" style="width:100%;margin-top:18px;padding:12px;border-radius:9px;background:var(--ap-accent,#5B5BD6);border:none;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Join investigation</button>
+          <div style="font-size:11.5px;color:#9197A1;text-align:center;margin-top:11px;">No password needed — your invite link signs you in.</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:16px;"><button onClick="{{ closeOverlay }}" class="ap-ghost" style="font-size:12px;color:#9197A1;background:transparent;border:none;cursor:pointer;font-family:inherit;">← Back to prototype</button></div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ CREATE ORG WIZARD ============ -->
+  <sc-if value="{{ isOrg }}">
+  <div data-screen-label="Create organization" style="position:fixed;inset:0;z-index:70;background:#F6F7F9;display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 24px;border-bottom:1px solid #E6E8EB;background:#fff;flex:none;">
+      <span style="width:28px;height:28px;border-radius:8px;background:var(--ap-accent-grad,linear-gradient(135deg,#5B5BD6,#8A6BF0));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">A</span>
+      <span style="font-size:14px;font-weight:600;flex:1;">Create a new organization</span>
+      <span style="font-size:12px;color:#9197A1;">{{ orgStepLabel }}</span>
+      <button onClick="{{ closeOverlay }}" class="ap-ghost" style="width:28px;height:28px;border-radius:7px;border:none;background:#F0F1F4;cursor:pointer;font-size:13px;color:#5B616E;">✕</button>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center;padding:34px 24px;">
+      <div style="width:520px;max-width:100%;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:26px;">
+          <span style="{{ s1 }}">1</span><span style="flex:1;height:2px;background:#EDEEF1;"></span>
+          <span style="{{ s2 }}">2</span><span style="flex:1;height:2px;background:#EDEEF1;"></span>
+          <span style="{{ s3 }}">3</span>
+        </div>
+
+        <sc-if value="{{ orgStep0 }}">
+        <div>
+          <h2 style="font-size:20px;font-weight:700;letter-spacing:-.01em;">Organization details</h2>
+          <p style="font-size:13.5px;color:#5B616E;margin-top:5px;">Tell us about the workspace you're setting up.</p>
+          <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:18px;margin-top:18px;">
+            <label style="font-size:12px;font-weight:600;color:#5B616E;">Organization name</label>
+            <input value="{{ orgName }}" onInput="{{ onOrgName }}" placeholder="e.g. Globex Engineering" style="width:100%;margin-top:6px;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13.5px;outline:none;" />
+            <div style="margin-top:14px;">
+              <label style="font-size:12px;font-weight:600;color:#5B616E;">Environment</label>
+              <select style="width:100%;margin-top:6px;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13.5px;background:#fff;outline:none;cursor:pointer;"><option>Production</option><option>Staging</option><option>Development</option></select>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ orgStep1 }}">
+        <div>
+          <h2 style="font-size:20px;font-weight:700;letter-spacing:-.01em;">Connect your first source</h2>
+          <p style="font-size:13.5px;color:#5B616E;margin-top:5px;">No hard requirements — connect one to start and add the rest anytime. Analysis depth scales with what you connect.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px;">
+            <sc-for list="{{ sourceHealth }}" as="x" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E6E8EB;border-radius:11px;padding:13px 14px;cursor:pointer;">
+                <span style="width:30px;height:30px;flex:none;border-radius:8px;background:{{ x.color }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;">{{ x.glyph }}</span>
+                <span style="flex:1;font-size:13px;font-weight:600;">{{ x.name }}</span>
+                <span style="width:18px;height:18px;border-radius:50%;border:1.5px solid #D4D7DC;"></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ orgStep2 }}">
+        <div>
+          <h2 style="font-size:20px;font-weight:700;letter-spacing:-.01em;">Invite your team</h2>
+          <p style="font-size:13.5px;color:#5B616E;margin-top:5px;">Add the people who respond to incidents. You can always do this later.</p>
+          <div style="background:#fff;border:1px solid #E6E8EB;border-radius:13px;padding:18px;margin-top:18px;">
+            <label style="font-size:12px;font-weight:600;color:#5B616E;">Teammate emails</label>
+            <textarea rows="3" placeholder="maya@globex.com, devin@globex.com…" class="ap-input" style="width:100%;margin-top:6px;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13.5px;outline:none;resize:none;line-height:1.6;"></textarea>
+            <div style="font-size:11.5px;color:#9197A1;margin-top:10px;">Everyone is invited as a Member and signs in with a magic link — no passwords to manage.</div>
+          </div>
+        </div>
+        </sc-if>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:24px;">
+          <button onClick="{{ orgBack }}" class="ap-ghost" style="padding:10px 16px;border-radius:9px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-weight:600;color:#16181D;cursor:pointer;font-family:inherit;">Back</button>
+          <span style="flex:1;"></span>
+          <sc-if value="{{ orgNotLast }}"><button onClick="{{ orgNext }}" class="ap-btn" style="padding:10px 20px;border-radius:9px;background:#16181D;border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Continue</button></sc-if>
+          <sc-if value="{{ orgStep2 }}"><button onClick="{{ finishOrg }}" class="ap-btn" style="padding:10px 20px;border-radius:9px;background:var(--ap-accent,#5B5BD6);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Create workspace</button></sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ INTEGRATION CONFIG ============ -->
+  <sc-if value="{{ configOpen }}">
+  <div onClick="{{ closeConfig }}" style="position:fixed;inset:0;z-index:65;background:rgba(16,18,29,.42);display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;">
+    <div onClick="{{ stop }}" style="width:480px;max-width:100%;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(16,18,29,.28);overflow:hidden;max-height:88vh;display:flex;flex-direction:column;">
+      <div style="padding:18px 20px;border-bottom:1px solid #EDEEF1;display:flex;align-items:center;gap:12px;flex:none;">
+        <span style="width:38px;height:38px;flex:none;border-radius:10px;background:{{ configInt.color }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;">{{ configInt.glyph }}</span>
+        <div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:600;">Connect {{ configInt.name }}</div><div style="font-size:12px;color:#9197A1;margin-top:2px;">{{ configInt.tools }} unlock once connected</div></div>
+        <button onClick="{{ closeConfig }}" class="ap-ghost" style="width:28px;height:28px;flex:none;border-radius:7px;border:none;background:#F0F1F4;cursor:pointer;font-size:13px;color:#5B616E;">✕</button>
+      </div>
+      <div style="padding:18px 20px;overflow-y:auto;">
+        <sc-for list="{{ configFields }}" as="f" hint-placeholder-count="3">
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:#5B616E;display:block;margin-bottom:6px;">{{ f.label }}</label>
+            <sc-if value="{{ f.isSelect }}">
+              <select style="width:100%;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13.5px;background:#fff;outline:none;cursor:pointer;"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3"><option>{{ o }}</option></sc-for></select>
+            </sc-if>
+            <sc-if value="{{ f.isTextarea }}">
+              <textarea rows="3" placeholder="{{ f.ph }}" class="ap-input" style="width:100%;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13px;outline:none;resize:none;line-height:1.5;"></textarea>
+            </sc-if>
+            <sc-if value="{{ f.isText }}">
+              <input type="{{ f.type }}" placeholder="{{ f.ph }}" class="ap-mono" style="width:100%;border:1px solid #DADCE0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13px;outline:none;" />
+            </sc-if>
+          </div>
+        </sc-for>
+        <sc-if value="{{ testOk }}">
+          <div style="display:flex;align-items:center;gap:9px;background:#E7F6EE;border:1px solid #CDEBDD;border-radius:10px;padding:11px 13px;"><span style="width:20px;height:20px;flex:none;border-radius:50%;background:#1F8A5B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</span><span style="font-size:12.5px;font-weight:500;color:#16623F;">{{ testMsg }}</span></div>
+        </sc-if>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #EDEEF1;display:flex;align-items:center;gap:10px;background:#FBFBFC;flex:none;">
+        <button onClick="{{ testConn }}" class="ap-ghost" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:9px;background:#fff;border:1px solid #DADCE0;font-size:13px;font-weight:600;color:#16181D;cursor:pointer;font-family:inherit;">
+          <sc-if value="{{ testTesting }}"><span style="width:13px;height:13px;border:2px solid #C7CAD0;border-top-color:#5B616E;border-radius:50%;animation:ap-spin .7s linear infinite;"></span>Testing…</sc-if>
+          <sc-if value="{{ testIdle }}">Test connection</sc-if>
+          <sc-if value="{{ testOk }}"><span style="color:#1F8A5B;">✓</span> Test again</sc-if>
+        </button>
+        <span style="flex:1;"></span>
+        <button onClick="{{ closeConfig }}" class="ap-btn" style="padding:10px 18px;border-radius:9px;background:var(--ap-accent,#5B5BD6);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">{{ configCta }}</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Indigo&quot;,&quot;Teal&quot;,&quot;Violet&quot;,&quot;Amber&quot;],&quot;default&quot;:&quot;Indigo&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;workbenchView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Split&quot;,&quot;Focus&quot;],&quot;default&quot;:&quot;Split&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;motion&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Live&quot;,&quot;Calm&quot;],&quot;default&quot;:&quot;Live&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'home', role: 'admin', orgOpen: false,
+    draft: '', mode: 'steer', userMessages: [], agentStopped: false,
+    inviteOpen: false, inviteEmail: '', inviteRole: 'member', inviteSent: false, joined: false,
+    overlay: null, orgStep: 0, orgName: '', org: 'Acme Platform',
+    configKey: null, testState: 'idle',
+  };
+
+  nav(active) {
+    const on = "display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:9px;border:none;cursor:pointer;font-size:13.5px;font-weight:600;font-family:inherit;background:var(--ap-accent-tint,#EEEEFB);color:var(--ap-accent-deep,#4F4FCB);";
+    const off = "display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:9px;border:none;cursor:pointer;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:#3A3E46;";
+    return active ? on : off;
+  }
+  modeBtn(active) {
+    const on = "padding:5px 11px;border-radius:7px;border:1px solid #DAD9F7;background:var(--ap-accent-tint,#EEEEFB);color:var(--ap-accent-deep,#4F4FCB);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;";
+    const off = "padding:5px 11px;border-radius:7px;border:1px solid transparent;background:transparent;color:#9197A1;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;";
+    return active ? on : off;
+  }
+
+  send() {
+    const t = (this.state.draft || '').trim();
+    if (!t) return;
+    this.setState(s => ({ userMessages: [...s.userMessages, { text: t, isSteer: s.mode === 'steer' }], draft: '' }));
+  }
+
+  stepDot(on) {
+    const base = "width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;";
+    return base + (on ? "background:var(--ap-accent,#5B5BD6);color:#fff;" : "background:#EDEEF1;color:#9197A1;");
+  }
+  go(screen) { if (screen === 'integrations' && this.state.role !== 'admin') return; this.setState({ screen, orgOpen: false }); }
+  toggleStop() { this.setState(s => ({ agentStopped: !s.agentStopped })); }
+  openInvite() { this.setState({ inviteOpen: true, inviteSent: false }); }
+  sendInvite() { if (!(this.state.inviteEmail || '').trim()) return; this.setState({ inviteSent: true }); }
+  acceptInvite() { this.setState({ overlay: null, joined: true, screen: 'workbench' }); }
+  startOrg() { this.setState({ overlay: 'org', orgStep: 0, orgOpen: false, orgName: '' }); }
+  finishOrg() { this.setState(s => ({ overlay: null, org: (s.orgName || 'New workspace'), screen: 'home' })); }
+  openConfig(key) { this.setState({ configKey: key, testState: 'idle' }); }
+  closeConfig() { this.setState({ configKey: null, testState: 'idle' }); }
+  testConn() {
+    if (this.state.testState === 'testing') return;
+    this.setState({ testState: 'testing' });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ testState: 'ok' }), 1100);
+  }
+  componentDidMount() {
+    this._onDocClick = (e) => {
+      const el = e.target && e.target.closest && e.target.closest('[data-int]');
+      if (el) this.openConfig(el.getAttribute('data-int'));
+    };
+    document.addEventListener('click', this._onDocClick);
+  }
+  componentWillUnmount() { document.removeEventListener('click', this._onDocClick); }
+
+  renderVals() {
+    const s = this.state;
+    const accents = {
+      Indigo: { a: '#5B5BD6', deep: '#4F4FCB', tint: '#EEEEFB', grad: 'linear-gradient(135deg,#5B5BD6,#8A6BF0)' },
+      Teal:   { a: '#0E8C7F', deep: '#0B7468', tint: '#E1F3F0', grad: 'linear-gradient(135deg,#0E8C7F,#27B6A4)' },
+      Violet: { a: '#8B3FE8', deep: '#7A2FD6', tint: '#F2E9FC', grad: 'linear-gradient(135deg,#8B3FE8,#B57BF5)' },
+      Amber:  { a: '#C2780C', deep: '#9C610A', tint: '#FBF0DC', grad: 'linear-gradient(135deg,#D98A12,#E0A53C)' },
+    };
+    const ac = accents[this.props.accent] || accents.Indigo;
+    const sevMap = {
+      critical: { fg: '#C13438', bg: '#FCECEC' }, high: { fg: '#B45309', bg: '#FBEEDC' },
+      medium: { fg: '#9A7B0A', bg: '#FAF4DA' }, resolved: { fg: '#1F8A5B', bg: '#E7F6EE' },
+    };
+    const C = { dd: '#7C5CFC', k8s: '#326CE5', cicd: '#1F8A5B', git: '#E2502B' };
+    const incidents = [
+      { sev: 'Critical', k: 'critical', title: 'order-service throwing NullPointerException on checkout', svc: 'order-service → pricing-service', sources: [C.dd, C.cicd, C.git], status: 'Investigating', statusFg: 'var(--ap-accent,#5B5BD6)', people: '3', age: '6m' },
+      { sev: 'High', k: 'high', title: 'checkout pod OOMKilled, entering CrashLoopBackOff', svc: 'checkout · ns/prod', sources: [C.dd, C.k8s], status: 'Queued', statusFg: '#9197A1', people: '1', age: '14m' },
+      { sev: 'High', k: 'high', title: 'banking-app exhausting database connection pool', svc: 'banking-app · HikariCP', sources: [C.dd, C.k8s, C.git], status: 'Queued', statusFg: '#9197A1', people: '2', age: '22m' },
+      { sev: 'Medium', k: 'medium', title: 'demo pods Pending — no node satisfies toleration', svc: 'demo · scheduling', sources: [C.k8s], status: 'Queued', statusFg: '#9197A1', people: '0', age: '31m' },
+      { sev: 'Medium', k: 'medium', title: 'pricing-service ArithmeticException on volume discount', svc: 'pricing-service', sources: [C.git, C.dd], status: 'Queued', statusFg: '#9197A1', people: '0', age: '38m' },
+      { sev: 'Resolved', k: 'resolved', title: 'banking-app NullPointerException — enrichment cache miss', svc: 'banking-app · 94% confidence', sources: [C.git, C.dd], status: 'Resolved', statusFg: '#1F8A5B', people: '2', age: '2h' },
+    ].map(i => ({ ...i, sevFg: sevMap[i.k].fg, sevBg: sevMap[i.k].bg, open: () => this.setState({ screen: 'workbench' }) }));
+
+    const conn = { status: 'Connected', statusFg: '#1F8A5B', statusBg: '#E7F6EE', cta: 'Manage', ctaFg: '#16181D', ctaBg: '#fff', ctaBorder: '#DADCE0' };
+    const dis = { status: 'Not connected', statusFg: '#9197A1', statusBg: '#F0F1F4', cta: 'Connect', ctaFg: '#fff', ctaBg: 'var(--ap-accent,#5B5BD6)', ctaBorder: 'var(--ap-accent,#5B5BD6)' };
+    const cfg = {
+      'Datadog': { testMsg: 'Authenticated · 14 services & 6 monitors visible', fields: [
+        { label: 'API key', ph: 'dd_api_••••••••', kind: 'password' },
+        { label: 'Application key', ph: 'dd_app_••••••••', kind: 'password' },
+        { label: 'Site', kind: 'select', options: ['datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com', 'us5.datadoghq.com'] },
+      ] },
+      'GitHub / GitLab': { testMsg: 'Authenticated · 23 repositories accessible', fields: [
+        { label: 'Provider', kind: 'select', options: ['GitHub', 'GitLab', 'GitLab self-managed'] },
+        { label: 'Base URL', ph: 'https://gitlab.acme.io', kind: 'text' },
+        { label: 'Personal access token', ph: 'glpat-••••••••', kind: 'password' },
+        { label: 'Default group / org', ph: 'acme-platform', kind: 'text' },
+      ] },
+      'Kubernetes / EKS': { testMsg: 'Reached API server · 14 workloads in prod', fields: [
+        { label: 'Cluster name', ph: 'prod-eks-1', kind: 'text' },
+        { label: 'API server URL', ph: 'https://k8s.acme.io', kind: 'text' },
+        { label: 'Service account token', ph: 'paste kubernetes SA token…', kind: 'textarea' },
+        { label: 'Namespace scope', kind: 'select', options: ['All namespaces', 'prod', 'staging'] },
+      ] },
+      'CI/CD Pipelines': { testMsg: 'Connected · last deploy read 2m ago', fields: [
+        { label: 'Provider', kind: 'select', options: ['GitLab CI', 'GitHub Actions', 'Jenkins', 'Argo CD'] },
+        { label: 'API token', ph: '••••••••', kind: 'password' },
+        { label: 'Pipeline / project scope', ph: 'acme-platform/*', kind: 'text' },
+      ] },
+      'Configuration': { testMsg: 'Connected · 312 config keys indexed', fields: [
+        { label: 'Source', kind: 'select', options: ['Git repo', 'Consul', 'HashiCorp Vault', 'K8s ConfigMaps'] },
+        { label: 'Location / URL', ph: 'https://github.com/acme/config', kind: 'text' },
+        { label: 'Access token', ph: '••••••••', kind: 'password' },
+      ] },
+      'AWS Cloud': { testMsg: 'Assumed role · 8 RDS instances discovered', fields: [
+        { label: 'Access method', kind: 'select', options: ['IAM role (recommended)', 'Access keys'] },
+        { label: 'Role ARN', ph: 'arn:aws:iam::1234:role/apollo', kind: 'text' },
+        { label: 'External ID', ph: 'apollo-acme-x82f', kind: 'text' },
+        { label: 'Regions', ph: 'us-east-1, us-west-2', kind: 'text' },
+      ] },
+    };
+    const integrations = [
+      { name: 'Datadog', glyph: '◐', color: '#7C5CFC', desc: 'Metrics, logs, traces & monitor events for live signal correlation.', tools: '8 tools', ...conn },
+      { name: 'GitHub / GitLab', glyph: '⌥', color: '#E2502B', desc: 'Source, commits & diffs so the agent can read the code that changed.', tools: '6 tools', ...conn },
+      { name: 'Kubernetes / EKS', glyph: '⎈', color: '#326CE5', desc: 'Live pod, deployment, node & event state via the cluster API.', tools: '7 tools', ...conn },
+      { name: 'CI/CD Pipelines', glyph: '⟲', color: '#1F8A5B', desc: 'Deploy history to pin incidents to the release that introduced them.', tools: '4 tools', ...conn },
+      { name: 'Configuration', glyph: '⚙', color: '#5B616E', desc: 'Env, feature flags & manifests to catch config-driven regressions.', tools: '6 tools', ...conn },
+      { name: 'AWS Cloud', glyph: '☁', color: '#C2780C', desc: 'IAM, RDS & resource utilization for cloud-level root causes.', tools: '— locked', ...dis },
+    ].map((i) => ({ ...i, fields: (cfg[i.name] || {}).fields, testMsg: (cfg[i.name] || {}).testMsg, open: () => this.openConfig(i.name) }));
+
+    const isAdmin = s.role === 'admin';
+    const members = [
+      { name: 'Maya Chen', initials: 'MC', color: '#1F8A5B', email: 'maya.chen@acme.io', role: 'Admin', you: true },
+      { name: 'Devin Park', initials: 'DP', color: '#C2410C', email: 'devin.park@acme.io', role: 'Member', you: false },
+      { name: 'Sara Okafor', initials: 'SO', color: '#5B616E', email: 'sara.okafor@acme.io', role: 'Member', you: false },
+      { name: 'Tomás Rivera', initials: 'TR', color: '#0E7490', email: 'tomas.rivera@acme.io', role: 'Member', you: false },
+    ].map(m => ({ ...m, roleFg: m.role === 'Admin' ? 'var(--ap-accent-deep,#4F4FCB)' : '#5B616E', roleBg: m.role === 'Admin' ? 'var(--ap-accent-tint,#EEEEFB)' : '#F0F1F4', notYou: !m.you }));
+    const activeInv = [
+      { sev: 'Critical', k: 'critical', title: 'order-service NullPointerException on checkout', svc: 'order-service → pricing-service', status: 'Investigating', statusFg: 'var(--ap-accent,#5B5BD6)', age: '6m' },
+      { sev: 'High', k: 'high', title: 'checkout pod OOMKilled → CrashLoopBackOff', svc: 'checkout · ns/prod', status: 'Queued', statusFg: '#9197A1', age: '14m' },
+      { sev: 'High', k: 'high', title: 'banking-app exhausting DB connection pool', svc: 'banking-app · HikariCP', status: 'Queued', statusFg: '#9197A1', age: '22m' },
+    ].map(i => ({ ...i, sevFg: sevMap[i.k].fg, sevBg: sevMap[i.k].bg, open: () => this.setState({ screen: 'workbench' }) }));
+    const sourceHealth = [
+      { name: 'Datadog', color: '#7C5CFC', glyph: '◐', ok: true, note: 'streaming' },
+      { name: 'GitLab', color: '#E2502B', glyph: '⌥', ok: true, note: 'synced 2m ago' },
+      { name: 'Kubernetes', color: '#326CE5', glyph: '⎈', ok: true, note: 'prod cluster' },
+      { name: 'CI/CD', color: '#1F8A5B', glyph: '⟲', ok: true, note: 'GitLab CI' },
+      { name: 'Config', color: '#5B616E', glyph: '⚙', ok: true, note: 'in sync' },
+      { name: 'AWS', color: '#C2780C', glyph: '☁', ok: false, note: 'not connected' },
+    ].map(x => ({ ...x, bad: !x.ok }));
+    const sourceOpts = ['Datadog', 'GitHub / GitLab', 'Kubernetes / EKS', 'CI/CD Pipelines', 'Configuration', 'AWS Cloud'];
+
+    return {
+      isHome: s.screen === 'home', isWorkbench: s.screen === 'workbench', isIncidents: s.screen === 'incidents', isIntegrations: s.screen === 'integrations', isProfile: s.screen === 'profile',
+      role: s.role, isAdmin, notAdmin: !isAdmin, roleLabel: isAdmin ? 'Admin' : 'Member',
+      setAdmin: () => this.setState({ role: 'admin' }), setMember: () => this.setState({ role: 'member' }),
+      roleAdminBtn: this.modeBtn(isAdmin), roleMemberBtn: this.modeBtn(!isAdmin),
+      org: s.org, members, activeInv, sourceHealth, sourceOpts,
+      orgOpen: s.orgOpen, toggleOrg: () => this.setState(p => ({ orgOpen: !p.orgOpen })),
+      startOrg: () => this.startOrg(),
+      goHome: () => this.setState({ screen: 'home', orgOpen: false }),
+      goWorkbench: () => this.setState({ screen: 'workbench', orgOpen: false }),
+      goIncidents: () => this.setState({ screen: 'incidents', orgOpen: false }),
+      goIntegrations: () => this.go('integrations'),
+      goProfile: () => this.setState({ screen: 'profile', orgOpen: false }),
+      navHome: this.nav(s.screen === 'home'), navWorkbench: this.nav(s.screen === 'workbench'), navIncidents: this.nav(s.screen === 'incidents'), navIntegrations: this.nav(s.screen === 'integrations'), navProfile: this.nav(s.screen === 'profile'),
+      draft: s.draft, onDraft: (e) => this.setState({ draft: e.target.value }),
+      onKey: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); } },
+      send: () => this.send(),
+      setSteer: () => this.setState({ mode: 'steer' }), setComment: () => this.setState({ mode: 'comment' }),
+      steerBtn: this.modeBtn(s.mode === 'steer'), commentBtn: this.modeBtn(s.mode === 'comment'),
+      userMessages: s.userMessages,
+      incidents, integrations,
+      agentStopped: s.agentStopped, notStopped: !s.agentStopped, toggleStop: () => this.toggleStop(),
+      investChipText: s.agentStopped ? 'Paused' : 'Investigating',
+      investChipFg: s.agentStopped ? '#B45309' : 'var(--ap-accent,#5B5BD6)', investChipBg: s.agentStopped ? '#FBEEDC' : 'var(--ap-accent-tint,#EEEEFB)',
+      stopLabel: s.agentStopped ? 'Resume' : 'Stop',
+      composerStatus: s.agentStopped ? 'Investigation paused by you · agent on hold' : 'Apollo is investigating · reads your messages live',
+      composerDotBg: s.agentStopped ? '#B45309' : 'var(--ap-accent,#5B5BD6)',
+      inviteOpen: s.inviteOpen, openInvite: () => this.openInvite(), closeInvite: () => this.setState({ inviteOpen: false }),
+      inviteEmail: s.inviteEmail, onInviteEmail: (e) => this.setState({ inviteEmail: e.target.value }),
+      setInviteMember: () => this.setState({ inviteRole: 'member' }), setInviteAdmin: () => this.setState({ inviteRole: 'admin' }),
+      invRoleMemberBtn: this.modeBtn(s.inviteRole === 'member'), invRoleAdminBtn: this.modeBtn(s.inviteRole === 'admin'),
+      inviteSent: s.inviteSent, notInviteSent: !s.inviteSent, sendInvite: () => this.sendInvite(),
+      previewInvite: () => this.setState({ overlay: 'accept', inviteOpen: false }),
+      joined: s.joined, notJoined: !s.joined, saraNameColor: s.joined ? '#16181D' : '#5B616E',
+      isAccept: s.overlay === 'accept', isOrg: s.overlay === 'org',
+      closeOverlay: () => this.setState({ overlay: null }), acceptInvite: () => this.acceptInvite(),
+      stop: (e) => e.stopPropagation(),
+      orgStep0: s.orgStep === 0, orgStep1: s.orgStep === 1, orgStep2: s.orgStep === 2, orgNotLast: s.orgStep < 2,
+      orgName: s.orgName, onOrgName: (e) => this.setState({ orgName: e.target.value }),
+      orgBack: () => this.setState(p => ({ orgStep: Math.max(0, p.orgStep - 1) })),
+      orgNext: () => this.setState(p => ({ orgStep: Math.min(2, p.orgStep + 1) })),
+      finishOrg: () => this.finishOrg(), orgStepLabel: 'Step ' + (s.orgStep + 1) + ' of 3',
+      s1: this.stepDot(s.orgStep >= 0), s2: this.stepDot(s.orgStep >= 1), s3: this.stepDot(s.orgStep >= 2),
+      accent: ac.a, accentDeep: ac.deep, accentTint: ac.tint, accentGrad: ac.grad,
+      rootClass: (this.props.motion === 'Calm') ? 'ap-calm' : '',
+      showRail: (this.props.workbenchView ?? 'Split') !== 'Focus',
+      configOpen: !!s.configKey, closeConfig: () => this.closeConfig(),
+      configInt: integrations.find(i => i.name === s.configKey) || null,
+      configFields: (() => { const ci = integrations.find(i => i.name === s.configKey); return ci ? (ci.fields || []).map(f => ({ ...f, isSelect: f.kind === 'select', isTextarea: f.kind === 'textarea', isText: f.kind !== 'select' && f.kind !== 'textarea', type: f.kind === 'password' ? 'password' : 'text' })) : []; })(),
+      testConn: () => this.testConn(), testIdle: s.testState === 'idle', testTesting: s.testState === 'testing', testOk: s.testState === 'ok',
+      testMsg: (() => { const ci = integrations.find(i => i.name === s.configKey); return ci ? (ci.testMsg || 'Connection successful') : ''; })(),
+      configCta: (() => { const ci = integrations.find(i => i.name === s.configKey); return ci && ci.status === 'Connected' ? 'Save changes' : 'Connect'; })(),
+    };
+  }
+}
+</script>
+</body>
+</html>

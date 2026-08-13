@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     dd_app_key: str = ""
     dd_site: str = "us5.datadoghq.com"
 
+    # ── Org isolation ─────────────────────────────────────────────────────────
+    # Set this to the ingest API key shown in Apollo → Integrations.
+    # The agent will look up the matching org_id and stamp all errors with it.
+    apollo_ingest_api_key: str = ""
+
     # ── Datadog poller tuning ─────────────────────────────────────────────────
     poll_interval_seconds: int = 30
     # How far back to fetch on first poll (no cursor stored yet)

@@ -35,7 +35,18 @@
       "Bash(Remove-Item -Recurse -Force banking-app-master)",
       "PowerShell(Remove-Item *)",
       "Bash(del \"e:\\\\WISSEN\\\\rca-agent-abhineet\\\\rca-agent\\\\update_pptx.py\")",
-      "Bash(del *)"
+      "Bash(del *)",
+      "Bash(python -c ' *)",
+      "Bash(cat > *)",
+      "Bash(node -e ' *)",
+      "Bash(git -C \"E:\\\\WISSEN\\\\rca-agent-abhineet\\\\rca-agent\" diff HEAD -- apollo-agent/rca-agent/rca_agent/db.py)",
+      "Bash(git -C \"E:\\\\WISSEN\\\\rca-agent-abhineet\\\\rca-agent\" log --oneline -8 -- apollo-agent/rca-agent/rca_agent/db.py)",
+      "Bash(git -C \"E:\\\\WISSEN\\\\rca-agent-abhineet\\\\rca-agent\" diff HEAD -- apollo-agent/rca-agent/app/main.py)",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)"
+    ],
+    "additionalDirectories": [
+      "E:\\WISSEN\\rca-agent-abhineet\\rca-agent\\apollo-agent\\rca-agent\\ui\\src"
     ]
   }
 }

@@ -17,6 +17,7 @@ from db.database import (
     log_token_usage_sync,
     find_original_by_fingerprint,
     bump_occurrence,
+    get_org_config,
 )
 from utils.log_parser import parse_log_entry, ParsedLogEntry
 from utils.fingerprint import compute_fingerprint
@@ -239,8 +240,9 @@ SEVERITY: <one of: critical | high | medium | low>
 ANALYSIS: <max 40 words — probable root cause and blast radius>
 SUGGESTIONS: <fix 1, max 12 words>; <fix 2, max 12 words>; <fix 3, max 12 words>"""
 
-    if not settings.gemini_api_key:
-        logger.warning("analyze_node: GEMINI_API_KEY not set — skipping Gemini analysis")
+    gemini_key = get_org_config().get("gemini_api_key") or settings.gemini_api_key
+    if not gemini_key:
+        logger.warning("analyze_node: no Gemini API key configured — skipping analysis. Configure it in Apollo UI → Integrations → Ingestion Agent.")
         return {
             **state,
             "gemini_summary":     state.get("message", ""),
@@ -253,7 +255,7 @@ SUGGESTIONS: <fix 1, max 12 words>; <fix 2, max 12 words>; <fix 3, max 12 words>
     try:
         llm = ChatGoogleGenerativeAI(
             model=_GEMINI_MODEL,
-            google_api_key=settings.gemini_api_key,
+            google_api_key=gemini_key,
             temperature=0.1,
         )
         response = llm.invoke([HumanMessage(content=prompt)])

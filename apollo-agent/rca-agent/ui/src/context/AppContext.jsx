@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
-import { fetchMonitoring, setMonitoring, setSource, getToken } from '../api/client'
+import { fetchMonitoring, setMonitoring, setSource, getToken, fetchOrgs, createOrg as apiCreateOrg } from '../api/client'
 
 const AppContext = createContext(null)
 
@@ -67,6 +67,29 @@ export function AppProvider({ children }) {
     }
   }, [monitoringActive])
 
+  // Org state
+  const [orgs,       setOrgs]       = useState([])
+  const [activeOrg,  setActiveOrg]  = useState(null)
+
+  const loadOrgs = useCallback(() => {
+    if (!getToken()) return
+    fetchOrgs()
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data?.items || [])
+        setOrgs(list)
+        if (list.length > 0 && !activeOrg) setActiveOrg(list[0])
+      })
+      .catch(() => {})
+  }, [activeOrg])
+
+  const createOrgCtx = useCallback(async (body) => {
+    const org = await apiCreateOrg(body)
+    loadOrgs()
+    return org
+  }, [loadOrgs])
+
+  useEffect(() => { loadOrgs() }, [])   // load once on mount
+
   const [newReportCount, setNewReportCount] = useState(0)
 
   const incrementNewReports = useCallback(() => {
@@ -93,6 +116,7 @@ export function AppProvider({ children }) {
       streamTarget, openStream, closeStream,
       toast, showToast,
       newReportCount, incrementNewReports, clearNewReports,
+      orgs, activeOrg, setActiveOrg, loadOrgs, createOrg: createOrgCtx,
     }}>
       {children}
     </AppContext.Provider>
